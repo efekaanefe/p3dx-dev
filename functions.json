@@ -1,0 +1,10 @@
+{
+  "tryMovement": {
+    "functionname": "tryMovement",
+    "params": ["robot","trans_vel","rot_vel"]
+  },
+  "sendCommands": {
+    "functionname": "sendCommands",
+    "params": ["robot"]
+  }
+}

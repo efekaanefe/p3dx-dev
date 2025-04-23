@@ -1,0 +1,19 @@
+# PyCharm
+.idea/
+
+# Python bytecode files
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+env/
+
+# Configuration files
+*.iml
+
+# Mac OS
+.DS_Store
+
+# Windows
+Thumbs.db
