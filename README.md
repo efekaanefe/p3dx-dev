@@ -2,10 +2,13 @@
 
 ```main```
 ---
-The file to run from the computer. Currently just for testing purposes. When run, the user is asked to choose a function registered in. Current functions (these are just for testing/changing the mode of the robot at initialization purposes):
+The file to run from the computer. Currently just for testing purposes. When run, the user is asked to choose a function registered in. The functions and their parameters will be listed in the file ```functions.json```. When chosen, the main will first establish the connection, then run the function automatically (i.e. will use `runRobot` function in our robot class). At last, it will disconnect.
+
+
+Current functions (these are just for testing/changing the mode of the robot at initialization purposes):
 - `tryMovement`: Tries to move the robot according to the given parameters, reads the response and gives 0 velocity. (Timer yok şu an ani başlayıp durabilir)
 - `sendCommands`: Şu an işlevsiz, tryMovement'ın parametresi hali gibi takılıyor.
-- ```functions.json```. When chosen, the main will first establish the connection, then run the function automatically. At last, it will disconnect.
+
 
 
 ```p3dxRobotClass```
@@ -24,3 +27,4 @@ Current functionalities:
  - ``send_velocity``: Sends a translation and a rotation speed, both are scalar (an option for timing may be added)
  - ``read_response``: Read a single line from the robot (if available).
  - ``disconnect``: Disconnects from the serial port.
+ - ``runRobot``: Runs the robot with the given function and its arguments. Does basic things to prevent repetitive coding.
