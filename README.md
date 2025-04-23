@@ -2,7 +2,7 @@
 
 ```main```
 ---
-The file to run from the computer. Currently just for testing purposes. When run, the user is asked to choose a function registered in. The functions and their parameters will be listed in the file ```functions.json```. When chosen, the main will first establish the connection, then run the function automatically (i.e. will use `runRobot` function in our robot class). At last, it will disconnect.
+The file to run from the computer. Currently just for testing purposes. When run, the user is asked to choose a function. The functions and their parameters will be listed in the file ```functions.json```. When chosen, the main will first establish the connection, then run the function automatically (i.e. will use `runRobot` function in our robot class). At last, it will disconnect.
 
 
 Current functions (these are just for testing/changing the mode of the robot at initialization purposes):
