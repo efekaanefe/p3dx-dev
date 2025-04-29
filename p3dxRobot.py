@@ -2,6 +2,9 @@ import struct
 import serial
 import time
 from arCosEnum import *  # Assumes constants like ENABLE = 0x83, SYNC0 = 0xFA, etc.
+import threading
+
+
 
 # Add if not already in arCosEnum.py
 HEARTBEAT = 0xC9  # This is common for ARCOS, verify with your robot's docs
@@ -12,6 +15,31 @@ class P3DXRobot:
         self.baudrate = baudrate
         self.timeout = timeout
         self.serial_conn = None
+        self.heartbeat_thread = None
+        self.heartbeat_running = False
+
+    def _heartbeat_loop(self, interval=1.0):
+        print("[~] Heartbeat thread started.")
+        while self.heartbeat_running:
+            try:
+                self.send_pulse()
+                time.sleep(interval)
+            except Exception as e:
+                print(f"[!] Heartbeat error: {e}")
+                break
+        print("[~] Heartbeat thread stopped.")
+
+    def start_heartbeat(self, interval=1.0):
+        if not self.heartbeat_running:
+            self.heartbeat_running = True
+            self.heartbeat_thread = threading.Thread(target=self._heartbeat_loop, args=(interval,), daemon=True)
+            self.heartbeat_thread.start()
+
+    def stop_heartbeat(self):
+        self.heartbeat_running = False
+        if self.heartbeat_thread:
+            self.heartbeat_thread.join(timeout=2)
+            self.heartbeat_thread = None
 
     def connect(self):
         try:
@@ -23,15 +51,93 @@ class P3DXRobot:
             )
             if self.serial_conn.is_open:
                 print(f"[✓] Connected to {self.port} at {self.baudrate} baud.")
-                return True
+                if self.perform_sync_handshake():
+                    if self.send_open():
+                        self.send_pulse()
+                        self.enable_motors()
+                        self.start_heartbeat(interval=1.0)  # Start background pulse
+                        return True
+                    else:
+                        print("[✗] OPEN command failed.")
+                self.serial_conn.close()
         except serial.SerialException as e:
             print(f"[✗] Serial connection failed: {e}")
         return False
 
+    def send_open(self):
+        open_packet = bytes([250, 251, 3, 1, 0, 1])  # Same as SYNC1 structure but now acts as OPEN
+        self.serial_conn.write(open_packet)
+        print(f"[→] Sent OPEN command: {open_packet.hex(' ')}")
+
+        # Expect an echo of OPEN packet
+        echo = self.serial_conn.read(len(open_packet))
+        if echo != open_packet:
+            print(f"[✗] OPEN command failed. Expected echo: {open_packet.hex(' ')}, got: {echo.hex(' ')}")
+            return False
+        print("[✓] OPEN command echoed correctly.")
+        return True
+
+
+    def perform_sync_handshake(self):
+        sync_packets = [
+            bytes([250, 251, 3, 0, 0, 0]),  # SYNC0
+            bytes([250, 251, 3, 1, 0, 1]),  # SYNC1
+            bytes([250, 251, 3, 2, 0, 2])   # SYNC2
+        ]
+
+        for i, packet in enumerate(sync_packets):
+            self.serial_conn.write(packet)
+            print(f"[→] Sent SYNC{i}: {packet.hex(' ')}")
+
+            echo = self.serial_conn.read(len(packet))
+            if echo != packet:
+                print(f"[✗] SYNC{i} failed. Expected echo: {packet.hex(' ')}, got: {echo.hex(' ')}")
+                return False
+            print(f"[✓] SYNC{i} echoed correctly.")
+
+        # After SYNC2, wait for additional configuration strings (name, class, subclass)
+        config_data = b""
+        t_start = time.time()
+        while time.time() - t_start < 2:  # Allow 2 seconds to receive config info
+            chunk = self.serial_conn.read(1)
+            if not chunk:
+                break
+            config_data += chunk
+            if config_data.count(b'\x00') == 3:  # Expect three NULL-terminated strings
+                break
+
+        if config_data:
+            parts = config_data.split(b'\x00')
+            name = parts[0].decode(errors='ignore')
+            robot_class = parts[1].decode(errors='ignore') if len(parts) > 1 else ''
+            subclass = parts[2].decode(errors='ignore') if len(parts) > 2 else ''
+            print(f"[✓] Robot Info: Name='{name}', Class='{robot_class}', Subclass='{subclass}'")
+        else:
+            print("[!] No config data received after SYNC2.")
+
+        return True
+
+    def send_pulse(self):
+        pulse_packet = bytes([250, 251, 3, 0, 0, 0])
+        self.serial_conn.write(pulse_packet)
+        print(f"[→] Sent PULSE command: {pulse_packet.hex(' ')}")
+
+    def send_close(self):
+        close_packet = bytes([250, 251, 3, 2, 0, 2])
+        self.serial_conn.write(close_packet)
+        print(f"[→] Sent CLOSE command: {close_packet.hex(' ')}")
+
     def disconnect(self):
+        self.stop_heartbeat()  # <-- stop background thread first
         if self.serial_conn and self.serial_conn.is_open:
+            try:
+                self.send_close()
+                time.sleep(0.1)
+            except Exception as e:
+                print(f"[!] Error sending CLOSE command: {e}")
             self.serial_conn.close()
             print("[x] Disconnected.")
+
 
     def build_packet(self, command: int, data: bytes = b'') -> bytes:
         length = 1 + len(data)
@@ -112,6 +218,18 @@ class P3DXRobot:
             return None
 
         return command, data
+
+    def parse_sip(self, data: bytes):
+        # Example based on known SIP structure. You may need to adjust fields.
+        if len(data) < 20:
+            print("[!] SIP packet too short.")
+            return
+
+        flags, battery, x_pos, y_pos, heading = struct.unpack('>Hhiii', data[:18])
+        motors_enabled = bool(flags & 0x01)
+        print(
+            f"[SIP] Motors: {'ENABLED' if motors_enabled else 'DISABLED'}, Battery: {battery}, Position: ({x_pos}, {y_pos}), Heading: {heading}")
+
 
     def move_with_time(self, left_vel: int, right_vel: int, duration_sec: float, refresh_rate: float = 0.2):
         t_start = time.time()
