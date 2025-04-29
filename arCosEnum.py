@@ -1,5 +1,9 @@
 # === ARCOS Binary Command Definitions for Pioneer 3-DX ===
 
+# Add if not already in arCosEnum.py
+HEARTBEAT = 0xC9  # This is common for ARCOS, verify with your robot's docs
+
+
 # --- Motion Control ---
 ENABLE = 0x83               # Enable motors
 DISABLE = 0x84              # Disable motors
