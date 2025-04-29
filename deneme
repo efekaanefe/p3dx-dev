@@ -1,0 +1,73 @@
+import serial
+import struct
+import time
+
+# Helper function to calculate checksum
+def calc_checksum(packet):
+    count = packet[2] - 2  # exclude header and byte count
+    csum = 0
+    i = 3
+    while count > 1:
+        csum += (packet[i] << 8) | packet[i + 1]
+        csum &= 0xFFFF
+        i += 2
+        count -= 2
+    if count == 1:
+        csum ^= packet[i]
+    return [csum >> 8, csum & 0xFF]
+
+# Function to create packet
+def make_packet(cmd_num, arg_type=None, arg_val=None):
+    packet = [0xFA, 0xFB]  # header
+    body = [cmd_num]
+    if arg_type is not None:
+        body.append(arg_type)
+        if isinstance(arg_val, int):
+            body += [arg_val & 0xFF, (arg_val >> 8) & 0xFF]
+    byte_count = len(body) + 2  # add 2 for checksum
+    packet.append(byte_count)
+    packet += body
+    packet += calc_checksum(packet)
+    return bytes(packet)
+
+# Open serial connection
+ser = serial.Serial('/dev/ttyUSB0', baudrate=9600, timeout=1)
+
+# SYNC sequence
+sync_packets = [
+    [250, 251, 3, 0, 0, 0],  # SYNC0
+    [250, 251, 3, 1, 0, 1],  # SYNC1
+    [250, 251, 3, 2, 0, 2],  # SYNC2
+]
+
+# Send SYNC and wait for echo
+for sync in sync_packets:
+    pkt = bytes(sync)
+    ser.write(pkt)
+    echo = ser.read(len(pkt))
+    while echo != pkt:
+        echo = ser.read(len(pkt))
+    time.sleep(0.1)
+
+# OPEN servers
+ser.write(make_packet(1))  # OPEN
+time.sleep(0.1)
+
+# ENABLE motors
+ser.write(make_packet(4, 0x2B, 1))  # ENABLE 1
+time.sleep(0.1)
+
+# SET translation velocity (e.g., 200 mm/sec)
+ser.write(make_packet(6, 0x2B, 200))  # SETV 200
+time.sleep(0.1)
+
+# MOVE forward 500 mm
+ser.write(make_packet(8, 0x2B, 500))  # MOVE +500
+time.sleep(3)
+
+# STOP
+ser.write(make_packet(29))  # STOP
+
+# CLOSE connection
+ser.write(make_packet(2))  # CLOSE
+ser.close()
