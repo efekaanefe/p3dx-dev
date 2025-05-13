@@ -5,6 +5,7 @@ import time
 import threading
 
 
+
 class P3DXRobot:
     def __init__(self, port='/dev/ttyUSB0', baudrate=9600, timeout=1.0):
         self.port = port

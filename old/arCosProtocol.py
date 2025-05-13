@@ -1,7 +1,7 @@
 # arcos_protocol.py
 
 import struct
-from arCosEnum import *
+from old.arCosEnum import *
 
 class ArcosProtocol:
     SYNC_BYTES = bytes([SYNC0, SYNC1])
