@@ -8,7 +8,7 @@ from controller import Robot, Motor, Supervisor, Node
 import math
 import random
 
-# TODO 
+# TODO jkjlklljkkl
 # 1) radius of influence'ı koda dahil et!
 
 
