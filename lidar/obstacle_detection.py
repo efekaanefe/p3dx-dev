@@ -20,26 +20,34 @@ class PointCloudProcessor(Node):
         self.vis.add_geometry(self.pcd)
 
     def pointcloud_callback(self, msg):
-        points = []
-        for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
-            points.append(p)
-        points = np.array(points)
+        try:
+            points = []
+            for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
+                points.append(p)
+            points = np.array(points)
 
-        rotated = self.filter_n_turn(points, self.camera_tilt_deg)
-        filtered = self.mask_the_floor(rotated)
+            if len(points) == 0:
+                    self.get_logger().warn("No valid points received")
+                    return
+            
+            rotated = self.filter_n_turn(points, self.camera_tilt_deg)
+            filtered = self.mask_the_floor(rotated)
 
-        cloud = o3d.geometry.PointCloud()
-        cloud.points = o3d.utility.Vector3dVector(filtered)
+            cloud = o3d.geometry.PointCloud()
+            cloud.points = o3d.utility.Vector3dVector(filtered)
 
-        result = self.fit_plane(cloud)
-        if result:
-            normal, d = result
-            floor_xy, obstacle_xy = self.compute_dist(rotated, normal, d)
-            print(f"[Frame] Obstacles: {obstacle_xy.shape[0]} points")
-            self.update_viewer(floor_xy, obstacle_xy)
-        else:
-            print("[Frame] Plane fitting failed.")
+            result = self.fit_plane(cloud)
+            if result:
+                normal, d = result
+                floor_xy, obstacle_xy = self.compute_dist(rotated, normal, d)
+                print(f"[Frame] Obstacles: {obstacle_xy.shape[0]} points")
+                self.update_viewer(floor_xy, obstacle_xy)
+            else:
+                print("[Frame] Plane fitting failed.")
+                self.update_viewer(rotated, np.array([]).reshape(0, 3))
 
+        except Exception as e:
+            self.get_logger().error(f"Error in pointcloud callback: {str(e)}")
 
          # Apply inverse camera tilt (rotate upward around x-axis)
     def filter_n_turn(self, points, camera_tilt_deg):
@@ -86,8 +94,8 @@ class PointCloudProcessor(Node):
         filtered_points = filtered_points[mask_z]
 
         if filtered_points.shape[0] < 10:
-            filtered_points = self.mask_the_floor(rotated_points,0.2,0.2)
-            return filtered_points
+            print('Not enough point to fit plane')
+            return
         else:
             filtered_cloud = o3d.geometry.PointCloud()
             filtered_cloud.points = o3d.utility.Vector3dVector(filtered_points)
@@ -132,23 +140,38 @@ class PointCloudProcessor(Node):
         return floor_points,obstacle_points
     
     def update_viewer(self, floor_np, obstacle_np):
-        all_points = np.vstack([floor_np, obstacle_np])
-        colors = np.vstack([
-            np.tile([0, 0, 1], (len(floor_np), 1)),     # blue = floor
-            np.tile([1, 0, 0], (len(obstacle_np), 1))   # red = obstacle
-        ])
+        try:
+            self.pcd.clear()
+            if len(floor_np) == 0 and len(obstacle_np) == 0:
+                self.get_logger().warn("No points to display")
+                return
+            
+            all_points = np.vstack([floor_np, obstacle_np])
+            colors = np.vstack([
+                np.tile([0, 0, 1], (len(floor_np), 1)),     # blue = floor
+                np.tile([1, 0, 0], (len(obstacle_np), 1))   # red = obstacle
+            ])
 
-        self.pcd.points = o3d.utility.Vector3dVector(all_points)
-        self.pcd.colors = o3d.utility.Vector3dVector(colors)
+            self.pcd.points = o3d.utility.Vector3dVector(all_points)
+            self.pcd.colors = o3d.utility.Vector3dVector(colors)
 
-        self.vis.update_geometry(self.pcd)
-        self.vis.poll_events()
-        self.vis.update_renderer()
-    
+            self.vis.update_geometry(self.pcd)
+            self.vis.poll_events()
+            self.vis.update_renderer()
+        except Exception as e:
+            self.get_logger().error(f"Error in update_viewer: {str(e)}")
+            
 def main(args=None):
     rclpy.init(args=args)
     node = PointCloudProcessor()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
+if __name__ == '__main__':
+    main()
