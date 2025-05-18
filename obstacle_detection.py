@@ -14,46 +14,87 @@ class PointCloudProcessor(Node):
             self.pointcloud_callback,
             10)
         self.camera_tilt_deg = -30  # Adjust this based on your setup
+        self.vis = o3d.visualization.Visualizer()
+        self.vis.create_window(window_name='Live PointCloud', width=800, height=600)
+        self.pcd = o3d.geometry.PointCloud()
+        self.vis.add_geometry(self.pcd)
 
     def pointcloud_callback(self, msg):
-        # Convert PointCloud2 to numpy array
-        points = np.array([
-            p for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)
-        ])
-        if points.shape[0] == 0:
-            self.get_logger().warn("No points in point cloud")
-            return
+        points = []
+        for p in pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True):
+            points.append(p)
+        points = np.array(points)
 
-        # Apply inverse tilt (rotate upward around x-axis)
-        theta = np.radians(-self.camera_tilt_deg)
+        rotated = self.filter_n_turn(points, self.camera_tilt_deg)
+        filtered = self.mask_the_floor(rotated)
+
+        cloud = o3d.geometry.PointCloud()
+        cloud.points = o3d.utility.Vector3dVector(filtered)
+
+        result = self.fit_plane(cloud)
+        if result:
+            normal, d = result
+            floor_xy, obstacle_xy = self.compute_dist(rotated, normal, d)
+            print(f"[Frame] Obstacles: {obstacle_xy.shape[0]} points")
+            self.update_viewer(floor_xy, obstacle_xy)
+        else:
+            print("[Frame] Plane fitting failed.")
+
+
+         # Apply inverse camera tilt (rotate upward around x-axis)
+    def filter_n_turn(self, points, camera_tilt_deg):
+        theta = np.radians(-camera_tilt_deg)  # reverse tilt
         R = np.array([
             [1, 0, 0],
             [0, np.cos(theta), -np.sin(theta)],
             [0, np.sin(theta),  np.cos(theta)]
         ])
-        rotated_points = points @ R.T
+        RotZ = np.array([
+            [np.cos(np.pi), -np.sin(np.pi), 0],
+            [np.sin(np.pi),  np.cos(np.pi), 0],
+            [0, 0, 1]
+        ])
+        RotY = np.array([
+            [np.cos(np.pi), 0,  np.sin(np.pi)],
+            [0, 1, 0],
+            [-np.sin(np.pi), 0, np.cos(np.pi)]
+        ])
 
-        # Outlier removal
+        # Combine rotations
+        R_total = RotZ @ R @ RotY
+        rotated_points = points @ R_total.T
+
+        # Create Open3D point cloud
         cloud = o3d.geometry.PointCloud()
         cloud.points = o3d.utility.Vector3dVector(rotated_points)
-        filtered_cloud, _ = cloud.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
-        rotated_points = np.asarray(filtered_cloud.points)
 
+        # Remove outliers (noise)
+        filtered_cloud, _ = cloud.remove_statistical_outlier(
+            nb_neighbors=20,
+            std_ratio=2.0
+        )
+        rotated_points = np.asarray(filtered_cloud.points)
+        return rotated_points
+        
+    def mask_the_floor(self,rotated_points,y_ratio=0.1,z_ratio=0.1):
         # Further Y-Z filtering to isolate floor candidates
-        thresh_y = (rotated_points[:, 1].max() - rotated_points[:, 1].min()) * 0.1 + rotated_points[:, 1].min()
+        thresh_y = (rotated_points[:, 1].max() - rotated_points[:, 1].min()) * y_ratio + rotated_points[:, 1].min()
         mask_y = rotated_points[:, 1] < thresh_y
         filtered_points = rotated_points[mask_y]
-        thresh_z = (filtered_points[:, 2].min() - filtered_points[:, 2].max()) * 0.1 + filtered_points[:, 2].max()
+        thresh_z = (filtered_points[:, 2].min() - filtered_points[:, 2].max()) * z_ratio + filtered_points[:, 2].max()
         mask_z = filtered_points[:, 2] > thresh_z
         filtered_points = filtered_points[mask_z]
 
         if filtered_points.shape[0] < 10:
-            self.get_logger().warn("Not enough filtered points for floor plane detection")
-            return
-
-        filtered_cloud = o3d.geometry.PointCloud()
-        filtered_cloud.points = o3d.utility.Vector3dVector(filtered_points)
-
+            filtered_points = self.mask_the_floor(rotated_points,0.2,0.2)
+            return filtered_points
+        else:
+            filtered_cloud = o3d.geometry.PointCloud()
+            filtered_cloud.points = o3d.utility.Vector3dVector(filtered_points)
+        filtered_points = np.asarray(filtered_cloud.points)
+        return filtered_points
+    
+    def fit_plane(self,filtered_cloud):
         try:
             plane_model, _ = filtered_cloud.segment_plane(
                 distance_threshold=0.02, ransac_n=3, num_iterations=1000)
@@ -66,13 +107,16 @@ class PointCloudProcessor(Node):
         dot_to_y = np.dot(normal, [0, 1, 0])
         self.get_logger().info(f"Plane normal: {normal}, dot to y: {dot_to_y:.2f}")
 
+        '''
         if dot_to_y < 0.8:
             self.get_logger().warn("Detected plane is not horizontal enough. Aborting classification.")
             return
-
+        '''
+        return normal,d
+    
+    def compute_dist(self,rotated_points,normal,d,threshold = 0.08):    
         # Compute distances to the plane
         distances = np.abs((rotated_points @ normal) + d)
-        threshold = 0.08
         inliers = distances < threshold
 
         floor_points = rotated_points[inliers]
@@ -84,10 +128,27 @@ class PointCloudProcessor(Node):
         # e.g., publish, visualize, save, etc.
 
         obstacle_xy = obstacle_points[:, :2]
-        
+        floor_xy = floor_points[:,:2]
+        return floor_points,obstacle_points
+    
+    def update_viewer(self, floor_np, obstacle_np):
+        all_points = np.vstack([floor_np, obstacle_np])
+        colors = np.vstack([
+            np.tile([0, 0, 1], (len(floor_np), 1)),     # blue = floor
+            np.tile([1, 0, 0], (len(obstacle_np), 1))   # red = obstacle
+        ])
+
+        self.pcd.points = o3d.utility.Vector3dVector(all_points)
+        self.pcd.colors = o3d.utility.Vector3dVector(colors)
+
+        self.vis.update_geometry(self.pcd)
+        self.vis.poll_events()
+        self.vis.update_renderer()
+    
 def main(args=None):
     rclpy.init(args=args)
     node = PointCloudProcessor()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
