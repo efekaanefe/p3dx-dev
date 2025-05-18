@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
 
+"""
+1. Bu script, bilgisayar tarafından gönderilen twist mesajlarını alarak rosaria topic'ine gönderir ve robotun hız kontrolünü sağlar.
+2. Direkt olarak robottan çıkan USB kablosuna bağlı olan bilgisayara (veya Raspberry'ye) takılmalıdır.
+3. Çalıştırmadan önce
+rosrun rosaria RosAria
+komudunu yeni bir terminalde çalıştırarak robot bağlantısını sağlayın.
+4. Eğer uzaktan çalıştıracaksanız SSH ile bağlantı yapın.
+"""
+
 import rospy
 from geometry_msgs.msg import Twist
 

@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+
+
+"""
+1. Bu script uzak bir bilgisayardan klavye kullanarak pioneer robotun hızını kontrol etmek için kullanılır.
+2. Pioneer'e takılı olan bilgisayar ile aynı ağda olduğunuzdan ve haberleşebildiğinizden emin olmak için ROS_MASTER_ID'sini her iki bilgisayardan da kontrol edin.
+3. Sağ ve sol oklar robotun açısal hızını ayarlar.
+4. Alt ve üst oklar robotun çizgisel hızını ayarlar.
+"""
+
+
 import rospy
 import sys
 import termios
