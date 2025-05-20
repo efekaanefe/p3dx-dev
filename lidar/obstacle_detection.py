@@ -1,6 +1,8 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
+import socket
+import json
 import sensor_msgs_py.point_cloud2 as pc2
 import numpy as np
 import open3d as o3d
@@ -39,7 +41,8 @@ class PointCloudProcessor(Node):
             result = self.fit_plane(cloud)
             if result:
                 normal, d = result
-                floor_xy, obstacle_xy = self.compute_dist(rotated, normal, d)
+                floor_xy, obstacle_xy, floor_xyz, obstacle_xyz = self.compute_dist(rotated, normal, d)
+                self.send_obstacle_xy(obstacle_xy)
                 print(f"[Frame] Obstacles: {obstacle_xy.shape[0]} points")
                 self.update_viewer(floor_xy, obstacle_xy)
             else:
@@ -137,7 +140,7 @@ class PointCloudProcessor(Node):
 
         obstacle_xy = obstacle_points[:, :2]
         floor_xy = floor_points[:,:2]
-        return floor_points,obstacle_points
+        return floor_xy,obstacle_xy,floor_points,obstacle_points
     
     def update_viewer(self, floor_np, obstacle_np):
         try:
@@ -160,7 +163,15 @@ class PointCloudProcessor(Node):
             self.vis.update_renderer()
         except Exception as e:
             self.get_logger().error(f"Error in update_viewer: {str(e)}")
-            
+
+    def send_obstacle_xy(self, obstacle_xy):
+        coords_list = [tuple(row) for row in obstacle_xy]
+        data = json.dumps(coords_list).encode('utf-8')
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect(('127.0.0.1', 5000))  # or remote IP and port
+            s.sendall(data)
+
 def main(args=None):
     rclpy.init(args=args)
     node = PointCloudProcessor()
