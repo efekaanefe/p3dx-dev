@@ -42,9 +42,9 @@ class PointCloudProcessor(Node):
             if result:
                 normal, d = result
                 floor_xy, obstacle_xy, floor_xyz, obstacle_xyz = self.compute_dist(rotated, normal, d)
-                self.send_obstacle_xy(obstacle_xy)
+                #self.send_obstacle_xy(obstacle_xy)
                 print(f"[Frame] Obstacles: {obstacle_xy.shape[0]} points")
-                self.update_viewer(floor_xy, obstacle_xy)
+                self.update_viewer(floor_xyz, obstacle_xyz)
             else:
                 print("[Frame] Plane fitting failed.")
                 self.update_viewer(rotated, np.array([]).reshape(0, 3))
@@ -54,7 +54,7 @@ class PointCloudProcessor(Node):
 
          # Apply inverse camera tilt (rotate upward around x-axis)
     def filter_n_turn(self, points, camera_tilt_deg):
-        theta = np.radians(-camera_tilt_deg)  # reverse tilt
+        theta = np.radians(-0)  # reverse tilt
         R = np.array([
             [1, 0, 0],
             [0, np.cos(theta), -np.sin(theta)],
@@ -81,13 +81,13 @@ class PointCloudProcessor(Node):
 
         # Remove outliers (noise)
         filtered_cloud, _ = cloud.remove_statistical_outlier(
-            nb_neighbors=20,
+            nb_neighbors=points.shape[0]*0.1,
             std_ratio=2.0
         )
         rotated_points = np.asarray(filtered_cloud.points)
         return rotated_points
         
-    def mask_the_floor(self,rotated_points,y_ratio=0.1,z_ratio=0.1):
+    def mask_the_floor(self,rotated_points,y_ratio=0.2,z_ratio=0.2):
         # Further Y-Z filtering to isolate floor candidates
         thresh_y = (rotated_points[:, 1].max() - rotated_points[:, 1].min()) * y_ratio + rotated_points[:, 1].min()
         mask_y = rotated_points[:, 1] < thresh_y
@@ -115,7 +115,14 @@ class PointCloudProcessor(Node):
 
         a, b, c, d = plane_model
         normal = np.array([a, b, c]) / np.linalg.norm([a, b, c])
-        dot_to_y = np.dot(normal, [0, 1, 0])
+        theta = np.radians(-self.camera_tilt_deg)
+        R = np.array([
+            [1, 0, 0],
+            [0, np.cos(theta), -np.sin(theta)],
+            [0, np.sin(theta), np.cos(theta)]
+        ])
+        rotated_normal = normal @ R
+        dot_to_y = np.dot(rotated_normal, [0, 1, 0])
         self.get_logger().info(f"Plane normal: {normal}, dot to y: {dot_to_y:.2f}")
 
         '''
@@ -125,7 +132,7 @@ class PointCloudProcessor(Node):
         '''
         return normal,d
     
-    def compute_dist(self,rotated_points,normal,d,threshold = 0.08):    
+    def compute_dist(self,rotated_points,normal,d,threshold = 0.1):
         # Compute distances to the plane
         distances = np.abs((rotated_points @ normal) + d)
         inliers = distances < threshold
@@ -138,14 +145,16 @@ class PointCloudProcessor(Node):
         # Optional: store or process the floor and obstacle points
         # e.g., publish, visualize, save, etc.
 
-        obstacle_xy = obstacle_points[:, :2]
-        floor_xy = floor_points[:,:2]
+        # Map your [-Z, X] → their [X, Y]
+        obstacle_xy = np.column_stack([-obstacle_points[:, 2], obstacle_points[:, 0]])
+        floor_xy = np.column_stack([-floor_points[:, 2], floor_points[:, 0]])
+
         return floor_xy,obstacle_xy,floor_points,obstacle_points
     
     def update_viewer(self, floor_np, obstacle_np):
         try:
             self.pcd.clear()
-            if len(floor_np) == 0 and len(obstacle_np) == 0:
+            if len(floor_np) == 0 and- len(obstacle_np) == 0:
                 self.get_logger().warn("No points to display")
                 return
             
@@ -161,6 +170,7 @@ class PointCloudProcessor(Node):
             self.vis.update_geometry(self.pcd)
             self.vis.poll_events()
             self.vis.update_renderer()
+            self.vis.reset_view_point(True)
         except Exception as e:
             self.get_logger().error(f"Error in update_viewer: {str(e)}")
 
