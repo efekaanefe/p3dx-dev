@@ -134,14 +134,14 @@ class PointCloudProcessor(Node):
         self.get_logger().info(f"Plane normal: {normal}, dot to y: {dot_to_y:.2f}")
 
         
-        if dot_to_y < 0.5:
+        if dot_to_y < 0.8:
             self.get_logger().warn("Detected plane is not horizontal enough. Aborting classification.")
             return self.last_plane
         
         self.last_plane = (normal, d)
         return normal,d
     
-    def compute_dist(self,rotated_points,normal,d,threshold = 0.1):
+    def compute_dist(self,rotated_points,normal,d,threshold = 0.08):
         # Compute distances to the plane
         distances = np.abs((rotated_points @ normal) + d)
         inliers = distances < threshold
