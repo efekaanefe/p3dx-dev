@@ -1,4 +1,4 @@
-from old.p3dxRobot import P3DXRobot
+from old.structure.p3dxRobot import P3DXRobot
 import json
 
 # Load the JSON file

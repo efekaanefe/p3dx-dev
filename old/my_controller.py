@@ -4,9 +4,8 @@ This controller implements a potential field navigation approach for the e-puck 
 The robot is attracted to a goal point while being repelled by predefined obstacle points.
 """
 
-from controller import Robot, Motor, Supervisor, Node
+from p3dx_structure.rb2.controller import Supervisor
 import math
-import random
 
 # Kodun kinematik drive o field'a göre sürme kısmı ile ilgilenilecek.
 

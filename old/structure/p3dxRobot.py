@@ -1,6 +1,5 @@
-from arCosProtocol import ArcosProtocol
+from old.structure.arCosProtocol import ArcosProtocol
 import serial
-import struct
 import time
 import threading
 

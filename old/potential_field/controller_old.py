@@ -1,5 +1,5 @@
-from utils import matrix_multiply, scalar_multiply, combine_vectors, unit_vector, angle_between_unit_vectors
-from controller import Robot, Motor, Supervisor, Node, Keyboard
+from utils import scalar_multiply, combine_vectors, unit_vector, angle_between_unit_vectors
+from p3dx_structure.rb2.controller import Supervisor, Keyboard
 import math
 import random
 
