@@ -145,10 +145,10 @@ class PointCloudProcessor(Node):
         # Compute distances to the plane
         distances = np.abs((rotated_points @ normal) + d)
         inliers = distances < threshold
-
+        distances_below = obstacle_points @ normal_unit + d
         floor_points = rotated_points[inliers]
         obstacle_points = np.delete(rotated_points, inliers, axis=0)
-
+        obstacle_points = obstacle_points[distances_below >= 0]
         self.get_logger().info(f"Classified {len(floor_points)} floor points, {len(obstacle_points)} obstacle points")
 
         # Optional: store or process the floor and obstacle points
