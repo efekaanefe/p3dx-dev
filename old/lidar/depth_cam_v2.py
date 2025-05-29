@@ -15,7 +15,7 @@ class ObstacleDetector(Node):
             '/camera/depth/color/points',
             self.pointcloud_callback,
             10)
-        self.camera_tilt_deg = 0.0     # adjust for your mount
+        self.camera_tilt_deg = -20.0     # adjust for your mount
         # parameters for floor sampling/classification
         self.y_percentile = 5.0          # take the closest 5% by forward distance
         self.z_percentile = 5.0          # take the lowest 5% by height
@@ -56,7 +56,6 @@ class ObstacleDetector(Node):
                 sample_pts = self.sample_the_points(pts)
         '''
         # 3) sample closest & lowest points to estimate floor height
-        print(len(sample_pts))
         ave_floor_z = self.estimate_floor_z(sample_pts)
         print(ave_floor_z)
         if ave_floor_z is None:
@@ -73,7 +72,9 @@ class ObstacleDetector(Node):
             f"floor={len(floor_pts)}, obstacles={len(obstacle_pts)}")
         
         # 5) update Open3D view
-        self.update_viewer(floor_pts, obstacle_pts)
+        floor_pts_o3d = self.baseframe2o3dframe(floor_pts)
+        obstacle_pts_o3d = self.baseframe2o3dframe(obstacle_pts)
+        self.update_viewer(floor_pts_o3d, obstacle_pts_o3d)
 
     def filter_points(self, pts: np.ndarray) -> np.ndarray:
         cloud = o3d.geometry.PointCloud()
@@ -176,6 +177,10 @@ class ObstacleDetector(Node):
         if normal[1] > 0:  # flip sign if facing forward
             tilt_deg *= -1
         return tilt_deg
+
+    def baseframe2o3dframe(pts: np.ndarray):
+        np.column_stack([pts[:, 0], pts[:, 2], -pts[:, 1]])
+        return pts
 
     def update_viewer(self, floor_np: np.ndarray, obstacle_np: np.ndarray):
         try:
