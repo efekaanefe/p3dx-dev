@@ -195,7 +195,7 @@ class ObstacleDetector(Node):
         return tilt_deg
 
     def baseframe2o3dframe(self, pts: np.ndarray):
-        np.column_stack([pts[:, 0], -pts[:, 1], -pts[:, 2]])
+        np.column_stack([pts[:, 0], -pts[:, 1], pts[:, 2]])
         return pts
 
     def update_viewer(self, floor_np: np.ndarray, obstacle_np: np.ndarray):
