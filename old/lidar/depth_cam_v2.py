@@ -15,12 +15,12 @@ class ObstacleDetector(Node):
             '/camera/depth/color/points',
             self.pointcloud_callback,
             10)
-        self.camera_tilt_deg = 20.0     # adjust for your mount
+        self.camera_tilt_deg = 30.0     # adjust for your mount
         # parameters for floor sampling/classification
         self.y_percentile = 5.0          # take the closest 5% by forward distance
         self.z_percentile = 5.0          # take the lowest 5% by height
         self.z_tolerance  = 0.1         # ±5 cm around floor median
-        self.floor_value = 0.85         # expected z value of floor pts
+        self.floor_value = 0.87         # expected z value of floor pts
         
         # set up Open3D visualizer
         self.vis = o3d.visualization.Visualizer()
@@ -61,8 +61,8 @@ class ObstacleDetector(Node):
         print(ave_floor_y)
         if ave_floor_y is None:
             self.get_logger().warn("not enough sample points for floor, default z value will be used")
-            z_val = np.min(pts[:,2])
-            return z_val
+            z_val = np.average(sample_pts[:,1])
+            ave_floor_y = z_val
 
         # 4) classify
         dz = np.abs(pts[:,1] - ave_floor_y)
@@ -73,9 +73,9 @@ class ObstacleDetector(Node):
             f"floor={len(floor_pts)}, obstacles={len(obstacle_pts)}")
         
         # 5) update Open3D view
-        floor_pts_o3d = self.baseframe2o3dframe(floor_pts)
-        obstacle_pts_o3d = self.baseframe2o3dframe(obstacle_pts)
-        self.update_viewer(floor_pts_o3d, obstacle_pts_o3d)
+        #floor_pts_o3d = self.baseframe2o3dframe(floor_pts)
+        #obstacle_pts_o3d = self.baseframe2o3dframe(obstacle_pts)
+        self.update_viewer(floor_pts, obstacle_pts)
 
     def filter_points(self, pts: np.ndarray) -> np.ndarray:
         cloud = o3d.geometry.PointCloud()
@@ -115,18 +115,17 @@ class ObstacleDetector(Node):
 
     def sample_the_points(self, pts: np.ndarray) -> np.ndarray:
         dists = np.linalg.norm(pts, axis=1)
-        mask_dist = dists < np.linalg.norm([self.floor_value,0.4])
+        mask_dist = dists < np.linalg.norm([self.floor_value,1])
         mask_y = pts[:, 1] > self.floor_value - 0.1
 
         mask = mask_dist & mask_y
 
         sample_points = pts[mask]
-
         return sample_points
 
     def estimate_floor_y(self, sample_pts: np.ndarray) -> Optional[float]:
         # pick the closest y-percentile (smallest y) AND lowest z-percentile:
-        if len(sample_pts) < 10:
+        if len(sample_pts) < 3:
             self.get_logger().warn("Not enough sample points found to estimate floor plane.")
             return -0.5
         y_values = sample_pts[:, 1]
@@ -194,8 +193,9 @@ class ObstacleDetector(Node):
             tilt_deg *= -1
         return tilt_deg
 
-    def baseframe2o3dframe(self, pts: np.ndarray):
+    def baseframe2o3dframe(self,pts: np.ndarray):
         np.column_stack([pts[:, 0], -pts[:, 1], pts[:, 2]])
+        print('frame converted')
         return pts
 
     def update_viewer(self, floor_np: np.ndarray, obstacle_np: np.ndarray):
@@ -214,6 +214,10 @@ class ObstacleDetector(Node):
             self.pcd.points = o3d.utility.Vector3dVector(all_points)
             self.pcd.colors = o3d.utility.Vector3dVector(colors)
 
+            bbox = self.pcd.get_axis_aligned_bounding_box()
+            center = bbox.get_center()
+            extent = bbox.get_extent()
+            diameter = np.linalg.norm(extent)
             if not self.vis_geometry_added:
                 self.vis.add_geometry(self.pcd)
                 self.vis_geometry_added = True
@@ -224,7 +228,7 @@ class ObstacleDetector(Node):
                 diameter = np.linalg.norm(extent)
                 self.vis.update_geometry(self.pcd)
             
-            self.vc.set_front([0, 0, 1])
+            self.vc.set_front([0, 0, -1])
             self.vc.set_up([0, -1, 0])
             self.vc.set_zoom(1.0 / diameter)
             self.vis.poll_events()
@@ -245,3 +249,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
