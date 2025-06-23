@@ -1,6 +1,9 @@
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
+import socket
+import json
+import time
 
 def generate_synthetic_pointcloud(n_floor=12000, object_specs=None):
     # Floor generation
@@ -202,7 +205,7 @@ def simulate_bicycle_motion(voxels, steps=100, dt=0.1, influence_radius=1.0, rep
                           attract_vector=np.array([0.0, 1.0]), attract_gain=2.0,
                             repulse_power=2.0,
                             max_speed=0.2, max_steering=np.radians(25),  # max turn rate
-                            wheelbase=0.5):
+                            wheelbase=0.38):
     pos = np.array([0.0, 0.0])  # initial position
     theta = np.pi /2  # initial orientation (facing +Y)
 
@@ -247,8 +250,9 @@ def simulate_bicycle_motion(voxels, steps=100, dt=0.1, influence_radius=1.0, rep
 
         trajectory.append(pos.copy())
         headings.append(theta)
-
-    return np.array(trajectory), np.array(headings)
+        publish(v, dtheta/dt)
+        time.sleep(0.1)
+    return np.array(trajectory), np.array(headings), 
 
 def plot_trajectory(voxels, trajectory):
     plt.figure(figsize=(8, 6))
@@ -289,6 +293,21 @@ def plot_trajectory_with_orientation(voxels, trajectory, headings, every=5):
     plt.ylabel("Z")
     plt.show()
 
+def publish(self, linear_x, angular_z):
+        msg = {
+            "linear_x": float(linear_x),
+            "angular_z": float(angular_z)
+        }
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect(("192.168.1.42", 9090))  # ← replace with actual IP of the Pioneer robot server
+                s.sendall(json.dumps(msg).encode('utf-8'))
+                response = s.recv(1024)
+                self.get_logger().info(f"TCP Response: {response.decode('utf-8')}")
+        except Exception as e:
+            self.get_logger().error(f"Failed to send velocity command via TCP: {e}")
+
 # Main execution
 points,obstacles = generate_synthetic_pointcloud()
 pcd = save_pointcloud_as_pcd(points)
@@ -310,7 +329,7 @@ vel, repulse, attract = compute_velocity_vector_from_voxels(desampled_obstacles)
 trajectory = simulate_robot_motion(desampled_obstacles, steps=500, dt=0.1)
 plot_trajectory(desampled_obstacles, trajectory)
 
-bicycle_trajectory, headings = simulate_bicycle_motion(desampled_obstacles,steps=200,repulse_gain=0.1,
+bicycle_trajectory, headings, lineer_vel, angular_vel = simulate_bicycle_motion(desampled_obstacles,steps=200,repulse_gain=0.1,
                           attract_vector=np.array([0.2, 1.0]), attract_gain=2.0,
                             repulse_power=4.0,
                             max_speed=0.2, max_steering=np.radians(50),  # max turn rate
