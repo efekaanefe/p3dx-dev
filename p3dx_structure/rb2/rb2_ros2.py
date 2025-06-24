@@ -17,38 +17,6 @@ Notlar:
 # angular velocity: rad/s
 """
 
-import tkinter as tk
-from threading import Thread
-
-class RobotGUI:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Robot Coordinates")
-
-        self.label = tk.Label(self.root, text="X: 0.00\nY: 0.00", font=("Arial", 24))
-        self.label.pack(padx=20, pady=20)
-
-        self.coord = (0.0, 0.0)
-
-        self.running = True
-        self.update_gui()
-
-    def update_coordinates(self, x, y):
-        self.coord = (x, y)
-
-    def update_gui(self):
-        if self.running:
-            self.label.config(text=f"X: {self.coord[0]:.2f}\nY: {self.coord[1]:.2f}")
-            self.root.after(500, self.update_gui)
-
-    def run(self):
-        self.root.mainloop()
-
-    def stop(self):
-        self.running = False
-        self.root.quit()
-
-
 
 
 import socket
@@ -70,7 +38,7 @@ K_field, K_key = 1, 1
 KEY_CHANGE = 0.1 # keyboard'da basılan bir tuşun keyboard'a ait hızı ne kadar etkileyeceği
 
 class RobotController(Node):
-    def __init__(self,is_simulation=False, host='192.168.1.100', port=9090):
+    def __init__(self,is_simulation=False, host='192.168.40.97', port=9090):
         super().__init__('robot_controller')
         self.is_simulation = is_simulation
 
@@ -86,7 +54,8 @@ class RobotController(Node):
         self.source_velocities = {
             KEYBOARD: (0.0, 0.0),
             ARUCO: (0.0, 0.0),
-            OBSTACLE: (0.0, 0.0)
+            OBSTACLE: (0.0, 0.0),
+            #TARGET : (0.0,0.0)
         }
 
         # set the current mode here, can ignore certain sources or try different strategies
@@ -94,6 +63,7 @@ class RobotController(Node):
 
         # socket stuff
         if not is_simulation:
+            print("Connecting to port")
             self.host = host
             self.port = port
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -108,14 +78,15 @@ class RobotController(Node):
 
         self.create_timer(2.0, self.request_status)  # call every 2 seconds
 
-        self.gui = RobotGUI()
-        self.gui_thread = Thread(target=self.gui.run, daemon=True)
-        self.gui_thread.start()
+
+    def resetSoruceVel(self):
+        for key, obj in self.source_velocities.items():
+            self.source_velocities[key] = (0.0,0.0)
+
 
     def update_location_artificially(self):
         self.curr_loc[0] = self.curr_loc[0] + self.linear_x * math.cos(self.angular_z)
         self.curr_loc[1] = self.curr_loc[1] + self.linear_x * math.sin(self.angular_z)
-        self.gui.update_coordinates(self.curr_loc[0], self.curr_loc[1])
 
     def send_curr_vel(self):
         cmd = {
@@ -162,6 +133,8 @@ class RobotController(Node):
     def base_callback(self, linear_x, angular_z, source):
         self.source_velocities[source] = (linear_x, angular_z)
         self.curr_mode_func()
+        self.resetSoruceVel()
+        print(self.source_velocities)
         self.send_curr_vel()
 
     def keyboard_vel_callback(self, msg):
