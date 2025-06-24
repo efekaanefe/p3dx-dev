@@ -38,7 +38,7 @@ class ArucoDetector(Node):
         dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
         parameters = aruco.DetectorParameters()
         self.detector = aruco.ArucoDetector(dictionary, parameters)
-        self.get_logger().info("Tracking ArUco marker ID: ", MARKER_ID_TO_TRACK)
+        self.get_logger().info(f"Tracking ArUco marker ID: {MARKER_ID_TO_TRACK}")
 
 
         # Create publisher based on mode
@@ -170,6 +170,7 @@ class ArucoDetector(Node):
 
 def main():
     simulation = True
+    rclpy.init()
     detector = ArucoDetector(simulation=simulation)
     try:
         rclpy.spin(detector)

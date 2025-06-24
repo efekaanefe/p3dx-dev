@@ -1,21 +1,19 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import PointCloud2
-import socket
-import json
 import sensor_msgs_py.point_cloud2 as pc2
 import numpy as np
 import open3d as o3d
+from geometry_msgs.msg import Pose, PoseArray
+
 
 class PointCloudProcessor(Node):
     def __init__(self):
         super().__init__('pointcloud_processor')
-        self.subscription = self.create_subscription(
-            PointCloud2,
-            '/camera/depth/color/points',
-            self.pointcloud_callback,
-            10)
-        self.camera_tilt_deg = 0  # Adjust this based on your setup
+        self.subscription = self.create_subscription(PointCloud2,'/camera/depth/color/points',self.pointcloud_callback,10)
+        self.obstacle_pub = self.create_publisher(PoseArray, 'obstacle_positions', 10)
+
+        self.camera_tilt_deg = -30  # Adjust this based on your setup
         self.last_plane = None  # To store (normal, d)
         self.vis = o3d.visualization.Visualizer()
         self.vis.create_window(window_name='Live PointCloud', width=800, height=600)
@@ -53,7 +51,7 @@ class PointCloudProcessor(Node):
             if result:
                 normal, d = result
                 floor_xy, obstacle_xy, floor_xyz, obstacle_xyz = self.compute_dist(rotated, normal, d)
-                #self.send_obstacle_xy(obstacle_xy)
+                self.publish_obstacles(obstacle_xy)
                 print(f"[Frame] Obstacles: {obstacle_xy.shape[0]} points")
                 self.update_viewer(floor_xyz, obstacle_xyz)
             else:
@@ -92,7 +90,7 @@ class PointCloudProcessor(Node):
 
         # Remove outliers (noise)
         filtered_cloud, _ = cloud.remove_statistical_outlier(
-            nb_neighbors=300,
+            nb_neighbors=points.shape[0]*0.1,
             std_ratio=2.0
         )
         rotated_points = np.asarray(filtered_cloud.points)
@@ -141,26 +139,24 @@ class PointCloudProcessor(Node):
         self.last_plane = (normal, d)
         return normal,d
     
-    def compute_dist(self, rotated_points, normal, d, threshold=0.08):
-    	# Compute distances to the plane
-	    distances = np.abs((rotated_points @ normal) + d)
-	    inliers = distances < threshold
+    def compute_dist(self,rotated_points,normal,d,threshold = 0.08):
+        # Compute distances to the plane
+        distances = np.abs((rotated_points @ normal) + d)
+        inliers = distances < threshold
 
-	    floor_points = rotated_points[inliers]
-	    obstacle_points = rotated_points[~inliers]  # complement of inliers
+        floor_points = rotated_points[inliers]
+        obstacle_points = np.delete(rotated_points, inliers, axis=0)
 
-	    # Filter only those obstacle points that are above the plane
-	    distances_below = obstacle_points @ normal + d
-	    obstacle_points = obstacle_points[distances_below >= 0]
+        self.get_logger().info(f"Classified {len(floor_points)} floor points, {len(obstacle_points)} obstacle points")
 
-	    self.get_logger().info(f"Classified {len(floor_points)} floor points, {len(obstacle_points)} obstacle points")
+        # Optional: store or process the floor and obstacle points
+        # e.g., publish, visualize, save, etc.
 
-	    # Map your [-Z, X] → their [X, Y]
-	    obstacle_xy = np.column_stack([-obstacle_points[:, 2], obstacle_points[:, 0]])
-	    floor_xy = np.column_stack([-floor_points[:, 2], floor_points[:, 0]])
+        # Map your [-Z, X] → their [X, Y]
+        obstacle_xy = np.column_stack([-obstacle_points[:, 2], obstacle_points[:, 0]])
+        floor_xy = np.column_stack([-floor_points[:, 2], floor_points[:, 0]])
 
-	    return floor_xy, obstacle_xy, floor_points, obstacle_points
-
+        return floor_xy,obstacle_xy,floor_points,obstacle_points
     
     def update_viewer(self, floor_np, obstacle_np):
         try:
@@ -185,13 +181,19 @@ class PointCloudProcessor(Node):
         except Exception as e:
             self.get_logger().error(f"Error in update_viewer: {str(e)}")
 
-    def send_obstacle_xy(self, obstacle_xy):
-        coords_list = [tuple(row) for row in obstacle_xy]
-        data = json.dumps(coords_list).encode('utf-8')
+    def publish_obstacles(self, obstacle_xy):
+        msg = PoseArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "map"  # Or use your camera frame
 
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect(('127.0.0.1', 5000))  # or remote IP and port
-            s.sendall(data)
+        for x, y in obstacle_xy:
+            pose = Pose()
+            pose.position.x = x
+            pose.position.y = y
+            pose.position.z = 0.0  # Optional for 2D
+            msg.poses.append(pose)
+
+        self.obstacle_pub.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)

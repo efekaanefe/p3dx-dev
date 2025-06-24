@@ -17,6 +17,38 @@ Notlar:
 # angular velocity: rad/s
 """
 
+import tkinter as tk
+from threading import Thread
+
+class RobotGUI:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Robot Coordinates")
+
+        self.label = tk.Label(self.root, text="X: 0.00\nY: 0.00", font=("Arial", 24))
+        self.label.pack(padx=20, pady=20)
+
+        self.coord = (0.0, 0.0)
+
+        self.running = True
+        self.update_gui()
+
+    def update_coordinates(self, x, y):
+        self.coord = (x, y)
+
+    def update_gui(self):
+        if self.running:
+            self.label.config(text=f"X: {self.coord[0]:.2f}\nY: {self.coord[1]:.2f}")
+            self.root.after(500, self.update_gui)
+
+    def run(self):
+        self.root.mainloop()
+
+    def stop(self):
+        self.running = False
+        self.root.quit()
+
+
 
 
 import socket
@@ -76,9 +108,14 @@ class RobotController(Node):
 
         self.create_timer(2.0, self.request_status)  # call every 2 seconds
 
+        self.gui = RobotGUI()
+        self.gui_thread = Thread(target=self.gui.run, daemon=True)
+        self.gui_thread.start()
+
     def update_location_artificially(self):
         self.curr_loc[0] = self.curr_loc[0] + self.linear_x * math.cos(self.angular_z)
         self.curr_loc[1] = self.curr_loc[1] + self.linear_x * math.sin(self.angular_z)
+        self.gui.update_coordinates(self.curr_loc[0], self.curr_loc[1])
 
     def send_curr_vel(self):
         cmd = {
