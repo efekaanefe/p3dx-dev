@@ -10,9 +10,9 @@ class PotentialFieldNode(Node):
     def __init__(self):
         super().__init__('potential_field_node')
 
-        self.publisher = self.create_publisher(Twist, 'obstacle_vel', 10)
         self.obstacle_subscription = self.create_subscription(PoseArray, 'obstacle_points', self.obstacle_callback, 10)
 
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("192.168.1.42", 9090))
         # Initial state
         self.position = [0.0, 0.0]
         self.robot_x_dir = [1.0, 0.0]  # Assume robot starts facing x direction
@@ -33,7 +33,6 @@ class PotentialFieldNode(Node):
 
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.connect(("192.168.1.42", 9090))  # ← replace with actual IP of the Pioneer robot server
                 s.sendall(json.dumps(msg).encode('utf-8'))
                 response = s.recv(1024)
                 self.get_logger().info(f"TCP Response: {response.decode('utf-8')}")
