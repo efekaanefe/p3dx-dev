@@ -95,26 +95,42 @@ class PointCloudProcessor(Node):
 
         return floor_xy,obstacle_xy,floor_points,obstacle_points
     
-    def update_viewer(self, floor_np, obstacle_np):
+    def update_viewer(self, floor_np: np.ndarray, obstacle_np: np.ndarray):
         try:
             self.pcd.clear()
-            if len(floor_np) == 0 and- len(obstacle_np) == 0:
+            if len(floor_np) == 0 and len(obstacle_np) == 0:
                 self.get_logger().warn("No points to display")
                 return
-            
+
             all_points = np.vstack([floor_np, obstacle_np])
             colors = np.vstack([
-                np.tile([0, 0, 1], (len(floor_np), 1)),     # blue = floor
-                np.tile([1, 0, 0], (len(obstacle_np), 1))   # red = obstacle
+                np.tile([0, 0, 1], (len(floor_np), 1)),  # blue = floor
+                np.tile([1, 0, 0], (len(obstacle_np), 1))  # red = obstacle
             ])
 
             self.pcd.points = o3d.utility.Vector3dVector(all_points)
             self.pcd.colors = o3d.utility.Vector3dVector(colors)
 
-            self.vis.update_geometry(self.pcd)
+            bbox = self.pcd.get_axis_aligned_bounding_box()
+            center = bbox.get_center()
+            extent = bbox.get_extent()
+            diameter = np.linalg.norm(extent)
+            if not self.vis_geometry_added:
+                self.vis.add_geometry(self.pcd)
+                self.vis_geometry_added = True
+            else:
+                bbox = self.pcd.get_axis_aligned_bounding_box()
+                center = bbox.get_center()
+                extent = bbox.get_extent()
+                diameter = np.linalg.norm(extent)
+                self.vis.update_geometry(self.pcd)
+            
+            self.vc.set_front([0, 0, -1])
+            self.vc.set_up([0, -1, 0])
+            self.vc.set_zoom(1.0 / diameter)
             self.vis.poll_events()
             self.vis.update_renderer()
-            self.vis.reset_view_point(True)
+            #self.vis.reset_view_point(True)
         except Exception as e:
             self.get_logger().error(f"Error in update_viewer: {str(e)}")
 
