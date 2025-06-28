@@ -3,32 +3,37 @@ import json
 import math
 import time
 import threading
-import keyboard
+from pynput import keyboard
 import tkinter as tk
 
 MAX_LINEAR_SPEED = 6.28
 MAX_ANGULAR_SPEED = 1.0
 
-
 class p3dxRobot:
-    def __init__(self, is_simulation=False, host='192.168.40.97', port=9090):
+    def __init__(self, is_simulation=False, host='192.168.68.58', port=9090):
         self.is_simulation = is_simulation
         self.linear_x = 0.0
         self.angular_z = 0.0
         self.curr_loc = [0.0, 0.0]
         self.curr_angle = 0.0
 
+        self.force_stop = False
+        self.autonomous_thread = None
+
         self.keyboard_active = False
         self.keyboard_thread = None
         self.mode = "Idle"
+        self.key_states = {"w": False, "s": False, "a": False, "d": False}
 
         self.gui_thread = None
         self.canvas = None
         self.dot = None
         self.heading_line = None
-        self.scale = 50  # 1m = 50px
+        self.scale = 400  # 1m = 400px
 
         self.running = True
+        self.set_speed_active = False
+
         self.velocity_thread = threading.Thread(target=self._velocity_loop)
         self.velocity_thread.daemon = True
         self.velocity_thread.start()
@@ -44,11 +49,17 @@ class p3dxRobot:
         self.start_gui()
 
     def _velocity_loop(self):
+        dt = 0.1
         while self.running:
-            self.send_curr_vel()
-            if self.is_simulation:
-                self.update_location_artificially(0.1)
-            time.sleep(0.1)
+            self.curr_loc[0] += self.linear_x * math.cos(self.curr_angle) * dt
+            self.curr_loc[1] += self.linear_x * math.sin(self.curr_angle) * dt
+            self.curr_angle += self.angular_z * dt
+            self.update_gui()
+
+            if self.set_speed_active or self.keyboard_active or not self.is_simulation:
+                self.send_curr_vel()
+
+            time.sleep(dt)
 
     def send_curr_vel(self):
         cmd = {"linear_x": self.linear_x, "angular_z": self.angular_z}
@@ -62,18 +73,12 @@ class p3dxRobot:
         else:
             print(f"Simulated: linear_x={cmd['linear_x']:.2f}, angular_z={cmd['angular_z']:.2f}")
 
-    def update_location_artificially(self, duration):
-        dt = 0.1
-        steps = int(duration / dt)
-        for _ in range(steps):
-            self.curr_loc[0] += self.linear_x * math.cos(self.curr_angle) * dt
-            self.curr_loc[1] += self.linear_x * math.sin(self.curr_angle) * dt
-            self.curr_angle += self.angular_z * dt
-            self.update_gui()
-            time.sleep(dt)
-
     def stop(self):
+        self.force_stop = True
+        self.set_speed_active = False
         self.set_velocity(0.0, 0.0)
+        self.mode = "Idle"
+        print("STOP issued.")
 
     def set_velocity(self, linear_x, angular_z):
         self.linear_x = max(min(linear_x, MAX_LINEAR_SPEED), -MAX_LINEAR_SPEED)
@@ -81,42 +86,33 @@ class p3dxRobot:
 
     def go(self, target_x, target_y):
         self.mode = "Autonomous"
-        goal_tolerance = 0.05  # meters
-        angle_tolerance = 0.05  # radians
-
-        max_forward_speed = 1.0
+        goal_tolerance = 0.05
+        angle_tolerance = 0.05
+        max_forward_speed = 0.2
         max_turn_speed = MAX_ANGULAR_SPEED * 0.8
+        self.force_stop = False
 
-        while self.running:
-            # Compute vector to goal
+        while self.running and not self.force_stop:
             dx = target_x - self.curr_loc[0]
             dy = target_y - self.curr_loc[1]
             distance = math.hypot(dx, dy)
 
             if distance < goal_tolerance:
-                break  # Goal reached
+                break
 
-            # Compute angle to target and angle difference
             target_angle = math.atan2(dy, dx)
-            angle_diff = target_angle - self.curr_angle
-            angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+            angle_diff = (target_angle - self.curr_angle + math.pi) % (2 * math.pi) - math.pi
 
             if abs(angle_diff) > angle_tolerance:
-                # Rotate in place toward the goal
                 angular_z = max_turn_speed if angle_diff > 0 else -max_turn_speed
                 self.set_velocity(0.0, angular_z)
             else:
-                # Move forward toward the goal
                 self.set_velocity(max_forward_speed, 0.0)
 
-            if self.is_simulation:
-                self.update_location_artificially(0.1)
-            else:
-                time.sleep(0.1)
+            time.sleep(0.1)
 
         self.set_velocity(0.0, 0.0)
         self.mode = "Idle"
-
 
     def close(self):
         self.running = False
@@ -127,19 +123,40 @@ class p3dxRobot:
 
     def _keyboard_loop(self):
         self.mode = "Manual (Keyboard)"
+        self.key_states = {"w": False, "s": False, "a": False, "d": False}
+
+        def on_press(key):
+            try:
+                k = key.char.lower()
+                if k in self.key_states:
+                    self.key_states[k] = True
+            except AttributeError:
+                if key == keyboard.Key.esc:
+                    self.stopKeyboard()
+                    return False
+
+        def on_release(key):
+            try:
+                k = key.char.lower()
+                if k in self.key_states:
+                    self.key_states[k] = False
+            except AttributeError:
+                pass
+
+        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+        listener.start()
+
         while self.keyboard_active:
             linear = 0.0
             angular = 0.0
-            if keyboard.is_pressed("up"):
-                linear += 1.0
-            if keyboard.is_pressed("down"):
-                linear -= 1.0
-            if keyboard.is_pressed("left") or keyboard.is_pressed("q"):
-                angular += MAX_ANGULAR_SPEED * 0.5
-            if keyboard.is_pressed("right") or keyboard.is_pressed("e"):
-                angular -= MAX_ANGULAR_SPEED * 0.5
-            if keyboard.is_pressed("esc"):
-                self.stopKeyboard()
+            if self.key_states["w"]:
+                linear += 0.1
+            if self.key_states["s"]:
+                linear -= 0.1
+            if self.key_states["a"]:
+                angular += 0.1
+            if self.key_states["d"]:
+                angular -= 0.1
 
             self.set_velocity(linear, angular)
             time.sleep(0.1)
@@ -155,8 +172,9 @@ class p3dxRobot:
 
     def stopKeyboard(self):
         self.keyboard_active = False
-        if self.keyboard_thread:
+        if self.keyboard_thread and self.keyboard_thread.is_alive():
             self.keyboard_thread.join()
+
 
     def start_gui(self):
         self.gui_thread = threading.Thread(target=self._init_gui)
@@ -166,51 +184,80 @@ class p3dxRobot:
     def _init_gui(self):
         self.root = tk.Tk()
         self.root.title("P3DX Robot Control")
-        self.root.geometry("950x700")
+        self.root.configure(bg="#2e2e2e")
+        self.root.geometry("1450x1100")
 
-        self.canvas_frame = tk.Frame(self.root)
-        self.canvas_frame.pack(side=tk.LEFT)
-        self.control_frame = tk.Frame(self.root, padx=15, pady=15)
-        self.control_frame.pack(side=tk.RIGHT, fill=tk.BOTH)
+        self.scale = 400  # 1 meter = 80 pixels for canvas display
 
-        self.canvas = tk.Canvas(self.canvas_frame, width=600, height=600, bg="white")
+        # Left side - canvas (arena)
+        self.canvas_frame = tk.Frame(self.root, bg="#2e2e2e")
+        self.canvas_frame.pack(side=tk.LEFT, padx=20, pady=20)
+
+        self.canvas = tk.Canvas(self.canvas_frame, width=800, height=800, bg="#3c3f41", highlightthickness=0)
         self.canvas.pack()
-        self.dot = self.canvas.create_oval(295, 295, 305, 305, fill="red")
-        self.heading_line = self.canvas.create_line(300, 300, 310, 300, fill="blue", width=2)
+        self.dot = self.canvas.create_oval(390, 390, 410, 410, fill="yellow")  # 20px robot
+        self.heading_line = self.canvas.create_line(400, 400, 440, 400, fill="skyblue", width=4)
 
-        self.mode_label = tk.Label(self.control_frame, text="Mode: Idle", font=("Arial", 14))
-        self.mode_label.pack(anchor="w")
+        # Right side - scrollable controls
+        control_canvas = tk.Canvas(self.root, width=900, height=860, bg="#2e2e2e", highlightthickness=0)
+        scrollbar = tk.Scrollbar(self.root, orient="vertical", command=control_canvas.yview)
+        self.control_frame = tk.Frame(control_canvas, bg="#2e2e2e")
 
-        self.pos_label = tk.Label(self.control_frame, text="Position: (0.00, 0.00)", font=("Arial", 14))
-        self.pos_label.pack(anchor="w")
+        self.control_frame.bind(
+            "<Configure>",
+            lambda e: control_canvas.configure(scrollregion=control_canvas.bbox("all"))
+        )
+        control_canvas.create_window((0, 0), window=self.control_frame, anchor="nw")
+        control_canvas.configure(yscrollcommand=scrollbar.set)
+        control_canvas.pack(side=tk.RIGHT, fill=tk.Y, expand=False)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.angle_label = tk.Label(self.control_frame, text="Angle: 0°", font=("Arial", 14))
-        self.angle_label.pack(anchor="w")
+        # Styling helpers
+        label_style = {"font": ("Arial", 16), "bg": "#2e2e2e", "fg": "white", "anchor": "w"}
+        entry_style = {"font": ("Arial", 15)}
 
-        self.vel_label = tk.Label(self.control_frame, text="Velocity: 0.0 m/s, 0.0 rad/s", font=("Arial", 14))
-        self.vel_label.pack(anchor="w")
+        self.mode_label = tk.Label(self.control_frame, text="Mode: Idle", **label_style)
+        self.mode_label.pack(anchor="w", pady=6)
 
-        self.toggle_btn = tk.Button(self.control_frame, text="Switch to Manual Mode", font=("Arial", 12),
-                                    command=self.toggle_mode)
-        self.toggle_btn.pack(pady=15)
+        self.pos_label = tk.Label(self.control_frame, text="Position: (0.00, 0.00)", **label_style)
+        self.pos_label.pack(anchor="w", pady=6)
 
-        tk.Label(self.control_frame, text="Go to (x, y) [m]:", font=("Arial", 12)).pack()
-        self.x_entry = tk.Entry(self.control_frame)
-        self.x_entry.pack()
-        self.y_entry = tk.Entry(self.control_frame)
-        self.y_entry.pack()
-        tk.Button(self.control_frame, text="Go There!", command=self.gui_go_to, font=("Arial", 12)).pack(pady=5)
+        self.angle_label = tk.Label(self.control_frame, text="Angle: 0°", **label_style)
+        self.angle_label.pack(anchor="w", pady=6)
 
-        tk.Label(self.control_frame, text="Set Speed (linear, angular):", font=("Arial", 12)).pack()
-        self.lin_entry = tk.Entry(self.control_frame)
-        self.lin_entry.pack()
-        self.ang_entry = tk.Entry(self.control_frame)
-        self.ang_entry.pack()
-        tk.Button(self.control_frame, text="Set Speed", command=self.gui_set_speed, font=("Arial", 12)).pack(pady=5)
+        self.vel_label = tk.Label(self.control_frame, text="Velocity: 0.0 m/s, 0.0 rad/s", **label_style)
+        self.vel_label.pack(anchor="w", pady=6)
 
-        self.stop_btn = tk.Button(self.control_frame, text="STOP", font=("Arial", 16), fg="white", bg="red",
+        self.toggle_btn = tk.Button(self.control_frame, text="Switch to Manual Mode",
+                                    font=("Arial", 15), bg="#5c5c5c", fg="white",
+                                    activebackground="#7a7a7a", command=self.toggle_mode)
+        self.toggle_btn.pack(pady=20, fill=tk.X)
+
+        section_label = lambda txt: tk.Label(self.control_frame, text=txt, **label_style)
+        entry = lambda: tk.Entry(self.control_frame, **entry_style)
+
+        section_label("Go to (x, y) [m]:").pack(anchor="w", pady=(12, 0))
+        self.x_entry = entry();
+        self.x_entry.pack(fill=tk.X, pady=2)
+        self.y_entry = entry();
+        self.y_entry.pack(fill=tk.X, pady=2)
+        tk.Button(self.control_frame, text="Go There!", font=("Arial", 15),
+                  command=self.gui_go_to, bg="#5c5c5c", fg="white",
+                  activebackground="#7a7a7a").pack(pady=10, fill=tk.X)
+
+        section_label("Set Speed (linear, angular):").pack(anchor="w", pady=(15, 0))
+        self.lin_entry = entry();
+        self.lin_entry.pack(fill=tk.X, pady=2)
+        self.ang_entry = entry();
+        self.ang_entry.pack(fill=tk.X, pady=2)
+        tk.Button(self.control_frame, text="Set Speed", font=("Arial", 15),
+                  command=self.gui_set_speed, bg="#5c5c5c", fg="white",
+                  activebackground="#7a7a7a").pack(pady=10, fill=tk.X)
+
+        self.stop_btn = tk.Button(self.control_frame, text="STOP", font=("Arial", 18, "bold"),
+                                  fg="white", bg="red", activebackground="darkred",
                                   command=self.stop)
-        self.stop_btn.pack(pady=20)
+        self.stop_btn.pack(pady=30, fill=tk.X)
 
         self._refresh_gui_loop()
         self.root.mainloop()
@@ -229,7 +276,11 @@ class p3dxRobot:
         try:
             x = float(self.x_entry.get())
             y = float(self.y_entry.get())
-            threading.Thread(target=lambda: self.go(x, y)).start()
+            if self.autonomous_thread and self.autonomous_thread.is_alive():
+                print("Already navigating. Stop first.")
+                return
+            self.autonomous_thread = threading.Thread(target=lambda: self.go(x, y))
+            self.autonomous_thread.start()
         except ValueError:
             print("Invalid input for go-to!")
 
@@ -238,6 +289,7 @@ class p3dxRobot:
             lin = float(self.lin_entry.get())
             ang = float(self.ang_entry.get())
             self.set_velocity(lin, ang)
+            self.set_speed_active = True
             self.mode = "Manual (SetSpeed)"
         except ValueError:
             print("Invalid input for speed!")
@@ -252,24 +304,23 @@ class p3dxRobot:
 
     def update_gui(self):
         if self.canvas:
-            x = 300 + self.curr_loc[0] * self.scale
-            y = 300 - self.curr_loc[1] * self.scale
-            self.canvas.coords(self.dot, x - 5, y - 5, x + 5, y + 5)
-            heading_length = 20
+            x = 400 + self.curr_loc[0] * self.scale
+            y = 400 - self.curr_loc[1] * self.scale
+            self.canvas.coords(self.dot, x - 10, y - 10, x + 10, y + 10)  # 20px diameter
+            heading_length = 40
             hx = x + heading_length * math.cos(self.curr_angle)
             hy = y - heading_length * math.sin(self.curr_angle)
             self.canvas.coords(self.heading_line, x, y, hx, hy)
 
 
 def main():
-    robot = p3dxRobot(is_simulation=True)
+    robot = p3dxRobot(is_simulation=False)
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
         robot.close()
-
 
 if __name__ == "__main__":
     main()
