@@ -1,6 +1,6 @@
 # Running P3DX
 
-This is the guide to run the whole p3dx package with ros2 and the p3dx itself.
+This is the guide to run the whole p3dx package with ros2 and the p3dx itself. For the API README, check under the folder socketAPI.
 
 Before everything, determine a common wi-fi and connect every device to that wi-fi.
 

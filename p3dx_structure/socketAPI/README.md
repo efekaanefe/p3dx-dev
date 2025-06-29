@@ -8,7 +8,8 @@ To try this api without a usage of socket, set the is_simulation parameter false
 
 ### Prerequisites
 
-`pip install keyboard`
+If you want this to be a simulation, no need for ros1. But if not, then follow the ros1 tutorial in the readme under the folder p3dx_structure.
 
-The ROS1 code present under p3dx_structure/rb1. Follow its README for more information on how to set it up.
+### Using the API
+
 
