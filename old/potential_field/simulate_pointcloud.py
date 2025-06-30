@@ -15,10 +15,10 @@ def generate_synthetic_pointcloud(n_floor=12000, object_specs=None):
     # Default object specs if not provided
     if object_specs is None:
         object_specs = [
-            {"center": (1.0, 0.3, 4.0), "size": (0.6, 0.6, 0.04), "count": 700},   # short wide object
-            {"center": (1.5, 0.5, 2.0), "size": (1.8, 1.0, 0.03), "count": 1800},    # tall thin object
-            {"center": (-1.0, 1.25, 1.0), "size": (0.5, 2.5, 0.05), "count": 1000},  # cube
-            {"center": (-2.0, 0.6, 1.5), "size": (1.2, 1.2, 0.02), "count": 1600},   # tall pole-like
+            {"center": (1.0, 0.3, 4.0), "size": (0.6, 0.6, 0.04), "count": 7000},   # short wide object
+            {"center": (-1, 0.5, 0.8), "size": (2, 1.0, 0.03), "count": 8000},    # tall thin object
+            {"center": (-1.0, 1.25, 3.0), "size": (0.5, 2.5, 0.05), "count": 3000},  # cube
+            {"center": (1.0, 0.6, 1), "size": (2, 1.2, 0.02), "count": 5000},   # tall pole-like
         ]
 
     object_points = []
@@ -89,8 +89,8 @@ def create_obstacle_grid(object_points, grid_res=0.1, x_range=(-3, 3), y_range=(
     return grid, x_bins, y_bins, x_min, y_min, grid_res
 
 def compute_velocity_vector_from_voxels(voxels,  robot_pos=np.array([0.0, 0.0]),
-                                        influence_radius=1.0, repulse_gain=10.0,
-                                        attract_vector=np.array([0.0, 1.0]), attract_gain=1.0,
+                                        influence_radius=2.0, repulse_gain=1.0,
+                                        attract_vector=np.array([0.0, 1.0]), attract_gain=0.0,
                                         repulse_power=3.0):
     """
     Compute total motion vector based on repulsion from obstacle voxels and constant attraction.
@@ -201,7 +201,7 @@ def simulate_robot_motion(voxels, steps=100, dt=0.1,
 
     return np.array(trajectory)
 
-def simulate_bicycle_motion(voxels, steps=100, dt=0.1, influence_radius=1.0, repulse_gain=0.2,
+def simulate_bicycle_motion(voxels, steps=100, dt=0.1, influence_radius=2.0, repulse_gain=0.2,
                           attract_vector=np.array([0.0, 1.0]), attract_gain=2.0,
                             repulse_power=2.0,
                             max_speed=0.2, max_steering=np.radians(25),  # max turn rate
@@ -239,19 +239,26 @@ def simulate_bicycle_motion(voxels, steps=100, dt=0.1, influence_radius=1.0, rep
 
         # Constant forward speed
         v = max_speed
+        # Bicycle model update 
 
-        # Bicycle model update
+        lineer_vel = np.dot([0,1],vel)
+        v = np.clip(lineer_vel,-max_speed,max_speed)
         dx = v * np.cos(theta) * dt
         dy = v * np.sin(theta) * dt
         dtheta = (v / wheelbase) * np.tan(steering_angle) * dt
 
+        
+        angular_vel = dtheta/dt
+
         pos += np.array([dx, dy])
         theta += dtheta
 
+        
         trajectory.append(pos.copy())
         headings.append(theta)
-        publish(v, dtheta/dt)
-        time.sleep(0.1)
+        #publish(v, dtheta/dt)
+        print(vel,v,angular_vel)
+        time.sleep(0.001)
     return np.array(trajectory), np.array(headings), 
 
 def plot_trajectory(voxels, trajectory):
@@ -311,7 +318,7 @@ def publish(self, linear_x, angular_z):
 # Main execution
 points,obstacles = generate_synthetic_pointcloud()
 pcd = save_pointcloud_as_pcd(points)
-visualize_pointcloud(pcd)
+#visualize_pointcloud(pcd)
 
 desampled_obstacles = voxel_desample_2d(obstacles, resolution=0.05)
 '''
@@ -326,12 +333,12 @@ vel, repulse, attract = compute_velocity_vector_from_voxels(desampled_obstacles)
 
 #visualize_velocity_field(desampled_obstacles, velocity=vel)
 
-trajectory = simulate_robot_motion(desampled_obstacles, steps=500, dt=0.1)
-plot_trajectory(desampled_obstacles, trajectory)
+#trajectory = simulate_robot_motion(desampled_obstacles, steps=500, dt=0.1)
+#plot_trajectory(desampled_obstacles, trajectory)
 
-bicycle_trajectory, headings, lineer_vel, angular_vel = simulate_bicycle_motion(desampled_obstacles,steps=200,repulse_gain=0.1,
-                          attract_vector=np.array([0.2, 1.0]), attract_gain=2.0,
-                            repulse_power=4.0,
-                            max_speed=0.2, max_steering=np.radians(50),  # max turn rate
-                            wheelbase=0.4)
+bicycle_trajectory, headings = simulate_bicycle_motion(desampled_obstacles,steps=400,repulse_gain=0.01,
+                          attract_vector=np.array([0.0, 1.0]), attract_gain=0.0,
+                            repulse_power=3.0,
+                            max_speed=1, max_steering=np.radians(25),  # max turn rate
+                            wheelbase=0.37)
 plot_trajectory_with_orientation(desampled_obstacles, bicycle_trajectory, headings)
