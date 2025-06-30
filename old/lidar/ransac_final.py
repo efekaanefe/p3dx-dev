@@ -134,41 +134,40 @@ class PointCloudProcessor(Node):
         except Exception as e:
             self.get_logger().error(f"Error in update_viewer: {str(e)}")
 
-    def project(pts: np.ndarray, grid_size=(1024,1024)):
+    def project(xrange, yrange, pts: np.ndarray, grid_size=(512,512)):
     
         # 2. Clip to XY range
-        x_min, x_max = 0,np.max(pts[:,0])+1
-        y_min, y_max = 0,np.max(pts[:,1])+1
-
+        #x_min, x_max = np.min(pts[:,0]),np.max(pts[:,0])
+        #y_min, y_max = np.min(pts[:,2]),np.max(pts[:,2])
+        x_min, x_max = xrange[0],xrange[1]
+        y_min, y_max = yrange[0],yrange[1]
         if len(pts) == 0:
             return None, None
-
+    
         # 3. Project to image grid
         img = np.zeros(grid_size, dtype=np.uint8)
         x_range = x_max - x_min
         y_range = y_max - y_min
-
+    
         u = ((pts[:, 0] - x_min) / x_range * (grid_size[1] - 1)).astype(int)
-        v = ((pts[:, 1] - y_min) / y_range * (grid_size[0] - 1)).astype(int)
-
+        v = ((pts[:, 2] - y_min) / y_range * (grid_size[0] - 1)).astype(int)
+    
         # flip vertical axis so image is upright
         v = grid_size[0] - 1 - v
-
+    
         img[v, u] = 255
-
+        
         # 4. Morphological filtering (remove noise)
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 4))
         img_clean = cv2.erode(img, kernel, iterations=1)
         img_clean = cv2.dilate(img_clean, kernel, iterations=1)
-
         # 5. Optionally: map back to original 3D points
-        kept = img[v, u] > 0
-        clean_3d_points = pts[kept]
-
-        x = x_min + (u / (grid_size[1] - 1)) * (x_max - x_min)
-        y = y_min + ((grid_size[0] - 1 - v) / (grid_size[0] - 1)) * (y_max - y_min)
-
-        return img_clean, clean_3d_points, np.column_stack((x, y))
+        v, u = np.where(img_clean > 0)
+        print(len(u))
+        x = x_min + (u / (grid_size[1] - 1)) * (x_range)
+        y = y_min + ((grid_size[0] - 1 - v) / (grid_size[0] - 1)) * (y_range)
+    
+        return img_clean, np.column_stack((x, y))
 
     def rotation_to_z(v, pts):
         v = v / np.linalg.norm(v)
