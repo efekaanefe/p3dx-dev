@@ -17,8 +17,6 @@ Notlar:
 # angular velocity: rad/s
 """
 
-
-
 import socket
 import json
 import rclpy
@@ -29,6 +27,7 @@ import math
 KEYBOARD = 0
 ARUCO = 1
 OBSTACLE = 2
+TARGET = 3
 
 # TODO: fine-tune
 MAX_LINEAR_SPEED = 6.28
@@ -37,8 +36,11 @@ MAX_ANGULAR_SPEED = 1.0
 K_field, K_key = 1, 1
 KEY_CHANGE = 0.1 # keyboard'da basılan bir tuşun keyboard'a ait hızı ne kadar etkileyeceği
 
+OVERALL_LINEAR = 0.0
+OVERALL_ANGULAR = 0.0
+
 class RobotController(Node):
-    def __init__(self,is_simulation=False, host='192.168.40.97', port=9090):
+    def __init__(self,is_simulation=False, host='192.168.68.58', port=9090):
         super().__init__('robot_controller')
         self.is_simulation = is_simulation
 
@@ -46,7 +48,9 @@ class RobotController(Node):
         self.subscriber_keyboard = self.create_subscription(Twist,'keyboard_vel',self.keyboard_vel_callback,10)
         self.subscriber_aruco = self.create_subscription(Twist,'aruco_vel',self.aruco_vel_callback,10)
         self.subscriber_obstacle = self.create_subscription(Twist, 'obs_avoid_vel', self.obstacle_vel_callback, 10)
+        self.subscriber_target = self.create_subscription(Twist, 'target_vel', self.target_vel_callback, 10)
         self.status_publisher = self.create_publisher(Twist, 'robot_status', 10)
+        self.overall_speed_publisher = self.create_publisher(Twist, 'overall_speed', 10)
 
         self.linear_x = 0.0
         self.angular_z = 0.0
@@ -59,7 +63,8 @@ class RobotController(Node):
         }
 
         # set the current mode here, can ignore certain sources or try different strategies
-        self.curr_mode_func = self.mode_potential_field
+        #self.curr_mode_func = self.mode_potential_field
+        self.curr_mode_func = self.mode_base
 
         # socket stuff
         if not is_simulation:
@@ -117,9 +122,13 @@ class RobotController(Node):
         self.angular_z = max(min(angular_z, MAX_ANGULAR_SPEED), -MAX_ANGULAR_SPEED)
 
     def mode_base(self):
+        global OVERALL_LINEAR, OVERALL_ANGULAR
         total_linear = sum(v[0] for v in self.source_velocities.values())
         total_angular = sum(v[1] for v in self.source_velocities.values())
         self.set_velocity(total_linear, total_angular)
+        OVERALL_LINEAR = total_linear
+        OVERALL_ANGULAR = total_angular
+        print(OVERALL_ANGULAR, OVERALL_LINEAR)
 
     def mode_potential_field(self):
         # TODO: şu an için arucoyu direkt ekliyoruz, onun için ek bir potential field burada yapılabilir
@@ -149,6 +158,10 @@ class RobotController(Node):
         self.get_logger().info("Received potential field velocity")
         self.base_callback(msg.linear.x, msg.angular.z, OBSTACLE)
 
+    def target_vel_callback(self, msg):
+        self.get_logger().info("Received target velocity")
+        self.base_callback(msg.linear.x, msg.angular.z, TARGET)
+
     def request_status(self):
         """
         Publishes to the topic periodically
@@ -177,6 +190,12 @@ class RobotController(Node):
             twist_msg.linear.x = self.curr_loc[0]
             twist_msg.angular.z = self.curr_loc[1]
             self.status_publisher.publish(twist_msg)
+            
+            overall_speed_msg = Twist()
+            overall_speed_msg.linear.x = OVERALL_LINEAR
+            overall_speed_msg.angular.z = OVERALL_ANGULAR
+            self.overall_speed_publisher.publish(overall_speed_msg)
+
             self.get_logger().info(
                 f"Published robot status: linear_x={twist_msg.linear.x}, angular_z={twist_msg.angular.z}")
 
