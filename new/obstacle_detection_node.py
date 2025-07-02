@@ -146,7 +146,7 @@ class PointCloudProcessor(Node):
     def project(self, pts: np.ndarray, grid_size=(512,512)):
     
         # 2. Clip to XY range
-        x_min, x_max = -4, 4
+        x_min, x_max = -3, 3
         y_min, y_max = -2, 6 #np.max(pts[:, 1]) + 1
         if len(pts) == 0:
             return None, None
