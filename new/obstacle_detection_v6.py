@@ -112,7 +112,15 @@ class ObstacleDetector(Node):
         mask = mask_dist & mask_y
 
         sample_points = pts[mask]
-        return sample_points
+        if len(sample_points)>3:
+            return sample_points
+        else:
+            x_values = np.random.uniform(-1, 1, size=3)
+            y_values = np.full(10, self.floor_value)
+            z_values = np.random.uniform(0, 3, size=3)
+            array = np.column_stack((x_values, y_values, z_values))
+            self.y_tolerance = 0.15
+            return array
 
     def estimate_floor_y(self, sample_pts: np.ndarray) -> Optional[float]:
         # pick the closest y-percentile (smallest y) AND lowest z-percentile:
