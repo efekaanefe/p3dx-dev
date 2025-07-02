@@ -116,7 +116,7 @@ class ObstacleDetector(Node):
             return sample_points
         else:
             x_values = np.random.uniform(-1, 1, size=3)
-            y_values = np.full(10, self.floor_value)
+            y_values = np.full(3, self.floor_value)
             z_values = np.random.uniform(0, 3, size=3)
             array = np.column_stack((x_values, y_values, z_values))
             self.y_tolerance = 0.15
