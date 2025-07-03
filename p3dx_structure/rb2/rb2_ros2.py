@@ -34,19 +34,20 @@ MAX_LINEAR_SPEED = 6.28
 MAX_ANGULAR_SPEED = 1.0
 
 K_field, K_key = 1, 1
-KEY_CHANGE = 0.1 # keyboard'da basılan bir tuşun keyboard'a ait hızı ne kadar etkileyeceği
+KEY_CHANGE = 0.1  # keyboard'da basılan bir tuşun keyboard'a ait hızı ne kadar etkileyeceği
 
 OVERALL_LINEAR = 0.0
 OVERALL_ANGULAR = 0.0
 
+
 class RobotController(Node):
-    def __init__(self,is_simulation=False, host='192.168.68.58', port=9090):
+    def __init__(self, is_simulation=False, host='192.168.68.63', port=9090):
         super().__init__('robot_controller')
         self.is_simulation = is_simulation
 
         # subscribe
-        self.subscriber_keyboard = self.create_subscription(Twist,'keyboard_vel',self.keyboard_vel_callback,10)
-        self.subscriber_aruco = self.create_subscription(Twist,'aruco_vel',self.aruco_vel_callback,10)
+        self.subscriber_keyboard = self.create_subscription(Twist, 'keyboard_vel', self.keyboard_vel_callback, 10)
+        self.subscriber_aruco = self.create_subscription(Twist, 'aruco_vel', self.aruco_vel_callback, 10)
         self.subscriber_obstacle = self.create_subscription(Twist, 'obs_avoid_vel', self.obstacle_vel_callback, 10)
         self.subscriber_target = self.create_subscription(Twist, 'target_vel', self.target_vel_callback, 10)
         self.status_publisher = self.create_publisher(Twist, 'robot_status', 10)
@@ -59,11 +60,11 @@ class RobotController(Node):
             KEYBOARD: (0.0, 0.0),
             ARUCO: (0.0, 0.0),
             OBSTACLE: (0.0, 0.0),
-            #TARGET : (0.0,0.0)
+            # TARGET : (0.0,0.0)
         }
 
         # set the current mode here, can ignore certain sources or try different strategies
-        #self.curr_mode_func = self.mode_potential_field
+        # self.curr_mode_func = self.mode_potential_field
         self.curr_mode_func = self.mode_base
 
         # socket stuff
@@ -78,16 +79,14 @@ class RobotController(Node):
             except Exception as e:
                 self.get_logger().error(f"Connection failed: {e}")
         else:
-            self.curr_loc = [0.0,0.0]
+            self.curr_loc = [0.0, 0.0]
             self.create_timer(1.0, self.update_location_artificially)
 
         self.create_timer(2.0, self.request_status)  # call every 2 seconds
 
-
     def resetSoruceVel(self):
         for key, obj in self.source_velocities.items():
-            self.source_velocities[key] = (0.0,0.0)
-
+            self.source_velocities[key] = (0.0, 0.0)
 
     def update_location_artificially(self):
         self.curr_loc[0] = self.curr_loc[0] + self.linear_x * math.cos(self.angular_z)
@@ -142,7 +141,7 @@ class RobotController(Node):
     def base_callback(self, linear_x, angular_z, source):
         self.source_velocities[source] = (linear_x, angular_z)
         self.curr_mode_func()
-        self.resetSoruceVel()
+        #self.resetSoruceVel()
         print(self.source_velocities)
         self.send_curr_vel()
 
@@ -190,7 +189,7 @@ class RobotController(Node):
             twist_msg.linear.x = self.curr_loc[0]
             twist_msg.angular.z = self.curr_loc[1]
             self.status_publisher.publish(twist_msg)
-            
+
             overall_speed_msg = Twist()
             overall_speed_msg.linear.x = OVERALL_LINEAR
             overall_speed_msg.angular.z = OVERALL_ANGULAR
