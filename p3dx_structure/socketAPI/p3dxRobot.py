@@ -16,6 +16,7 @@ class p3dxRobot:
         self.angular_z = 0.0
         self.curr_loc = [0.0, 0.0]
         self.curr_angle = 0.0
+        self.obstacles = []
 
         self.force_stop = False
         self.autonomous_thread = None
@@ -61,6 +62,25 @@ class p3dxRobot:
 
             time.sleep(dt)
 
+    def add_one_obstacle(self,obstacle):
+        """
+        obstacle: (x,y)
+        the function adds the obstacle to the canvas
+        """
+        if self.canvas:
+            x, y = obstacle
+            px = 400 + x * self.scale
+            py = 400 - y * self.scale
+            radius = 10  # pixel size of obstacle
+            self.canvas.create_oval(px - radius, py - radius, px + radius, py + radius, fill="red", outline="black")
+            self.obstacles.append(obstacle)
+            print(f"Added obstacle at ({x:.2f}, {y:.2f})")
+
+    def add_obstacles(self,obstacles):
+        for obstacle in obstacles:
+            self.add_one_obstacle(obstacle=obstacle)
+
+       
     def send_curr_vel(self):
         cmd = {"linear_x": self.linear_x, "angular_z": self.angular_z}
         if not self.is_simulation:
@@ -245,6 +265,17 @@ class p3dxRobot:
                   command=self.gui_go_to, bg="#5c5c5c", fg="white",
                   activebackground="#7a7a7a").pack(pady=10, fill=tk.X)
 
+
+        section_label("Add Obstacle (x, y) [m]:").pack(anchor="w", pady=(12, 0))
+        self.obs_x_entry = entry()
+        self.obs_x_entry.pack(fill=tk.X, pady=2)
+        self.obs_y_entry = entry()
+        self.obs_y_entry.pack(fill=tk.X, pady=2)
+        tk.Button(self.control_frame, text="Add Obstacle", font=("Arial", 15),
+                command=self.gui_add_obstacle, bg="#5c5c5c", fg="white",
+                activebackground="#7a7a7a").pack(pady=10, fill=tk.X)
+
+
         section_label("Set Speed (linear, angular):").pack(anchor="w", pady=(15, 0))
         self.lin_entry = entry();
         self.lin_entry.pack(fill=tk.X, pady=2)
@@ -271,6 +302,15 @@ class p3dxRobot:
             self.useKeyboard()
             self.toggle_btn.config(text="Switch to Auto Mode")
             self.mode = "Manual (Keyboard)"
+
+    def gui_add_obstacle(self):
+        try:
+            x = float(self.obs_x_entry.get())
+            y = float(self.obs_y_entry.get())
+            self.add_one_obstacle((x, y))
+        except ValueError:
+            print("Invalid input for obstacle!")
+
 
     def gui_go_to(self):
         try:
@@ -314,7 +354,7 @@ class p3dxRobot:
 
 
 def main():
-    robot = p3dxRobot(is_simulation=False)
+    robot = p3dxRobot(is_simulation= True)
 
     try:
         while True:
