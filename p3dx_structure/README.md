@@ -6,6 +6,11 @@ Before everything, determine a common wi-fi and connect every device to that wi-
 
 Also, the raspberry may get heated after connecting it to power and running it for a while, this will show itself as frozen terminals. The simplest way to cut the power and wait for it to cool down.
 
+## Master Script
+
+To get more idea about what to do within the terminals, you can check the master script under the folder p3dx_structure/Master Script. It shows how to run the ros1 section, the obstacle detection and the lidar (realsense camera) and the remaining base nodes (e.g.: rb2_ros2)
+
+
 ## Step 1: ROS1
 
 ### Using Raspberry
@@ -19,6 +24,8 @@ you can then ssh to the raspberry with:
 ssh ubuntu@HOST_IP
 ```
 Where the name before the @ sign should match the username of the device. For our raspberry it is `ubuntu`. You can use tmux or ssh 3 times for the following 3 codes we will run.
+
+This is already done automatically within the masterscript specifically for our raspberry.
 
 ---
 
@@ -66,13 +73,15 @@ ros2 pkg create --build-type ament_python rb2 --dependencies rclpy std_msgs
 5. To be able to run the scripts, open the `setup.py` file under your package folder. Make sure the console scripts list under the entry points dictionary 
 looks like this:
 ```python
-entry_points={
+        license='MIT',
+    entry_points={
         'console_scripts': [
-            'rb2_ros2 = rb2.rb2_ros2:main',
-            'aruco_robot = rb2.velocity_changing_nodes.aruco_robot:main',
-            'keyboard_control = rb2.velocity_changing_nodes.keyboard_control:main',
-            'obstacle_detection = rb2.velocity_changing_nodes.obstacle_detection:main',
-            'potential_field = rb2.velocity_changing_nodes.potential_field:main',
+            'rb2_ros2 = rb2_pkg.rb2_ros2:main',
+            'aruco_robot = rb2_pkg.velocity_changing_nodes.aruco_robot:main',
+            'keyboard_control = rb2_pkg.velocity_changing_nodes.keyboard_control:main',
+            'obstacle_detection = rb2_pkg.velocity_changing_nodes.obstacle_detection:main',
+            'potential_field = rb2_pkg.velocity_changing_nodes.potential_field:main',
+            'target = rb2_pkg.velocity_changing_nodes.target:main',
         ],
     },
 ```
@@ -87,7 +96,7 @@ source install/setup.bash
 Your workspace is now ready!
 
 
-### Running
+### Nodes
 
 Currently we have a core script named rb2_ros2.py which opens the socket and connects to the rb1_ros1.py code running within the raspberry. 
 
@@ -99,6 +108,7 @@ It will ask you whether you want this to be a simulation or not. If you type `y`
 
 You can run the other scripts by changing the console cript name in the command above.
 
+Other than the main node, remaining nodes within this package are all for publishing velocity, therefore named "velocity changing nodes"
 
 
 ## Development
