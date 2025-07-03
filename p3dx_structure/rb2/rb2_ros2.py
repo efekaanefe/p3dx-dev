@@ -22,12 +22,12 @@ import json
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Pose2D
 import math
 
 KEYBOARD = 0
-ARUCO = 1
+TARGET = 1
 OBSTACLE = 2
-TARGET = 3
 
 # TODO: fine-tune
 MAX_LINEAR_SPEED = 6.28
@@ -47,20 +47,19 @@ class RobotController(Node):
 
         # subscribe
         self.subscriber_keyboard = self.create_subscription(Twist, 'keyboard_vel', self.keyboard_vel_callback, 10)
-        self.subscriber_aruco = self.create_subscription(Twist, 'aruco_vel', self.aruco_vel_callback, 10)
-        self.subscriber_obstacle = self.create_subscription(Twist, 'obs_avoid_vel', self.obstacle_vel_callback, 10)
         self.subscriber_target = self.create_subscription(Twist, 'target_vel', self.target_vel_callback, 10)
-        self.status_publisher = self.create_publisher(Twist, 'robot_status', 10)
+        self.subscriber_obstacle = self.create_subscription(Twist, 'obs_avoid_vel', self.obstacle_vel_callback, 10)
+        self.status_publisher = self.create_publisher(Pose2D, 'robot_status', 10)
         self.overall_speed_publisher = self.create_publisher(Twist, 'overall_speed', 10)
 
         self.linear_x = 0.0
         self.angular_z = 0.0
 
+        self.dt = 1.0
         self.source_velocities = {
             KEYBOARD: (0.0, 0.0),
-            ARUCO: (0.0, 0.0),
-            OBSTACLE: (0.0, 0.0),
-            # TARGET : (0.0,0.0)
+            TARGET: (0.0, 0.0),
+            OBSTACLE: (0.0, 0.0)
         }
 
         # set the current mode here, can ignore certain sources or try different strategies
@@ -78,19 +77,20 @@ class RobotController(Node):
                 self.get_logger().info(f"Connected to robot at {self.host}:{self.port}")
             except Exception as e:
                 self.get_logger().error(f"Connection failed: {e}")
-        else:
-            self.curr_loc = [0.0, 0.0]
-            self.create_timer(1.0, self.update_location_artificially)
 
-        self.create_timer(2.0, self.request_status)  # call every 2 seconds
+        self.curr_loc = [0.0, 0.0]
+        self.curr_angle = 0.0 # positive x-axis direction
+        self.create_timer(self.dt, self.update_location_artificially)
 
     def resetSoruceVel(self):
         for key, obj in self.source_velocities.items():
             self.source_velocities[key] = (0.0, 0.0)
 
     def update_location_artificially(self):
-        self.curr_loc[0] = self.curr_loc[0] + self.linear_x * math.cos(self.angular_z)
-        self.curr_loc[1] = self.curr_loc[1] + self.linear_x * math.sin(self.angular_z)
+        self.curr_loc[0] += self.linear_x * math.cos(self.curr_angle) * self.dt
+        self.curr_loc[1] += self.linear_x * math.sin(self.curr_angle) * self.dt
+        self.curr_angle += self.angular_z * self.dt
+        self.request_status()
 
     def send_curr_vel(self):
         cmd = {
@@ -127,10 +127,10 @@ class RobotController(Node):
         self.set_velocity(total_linear, total_angular)
         OVERALL_LINEAR = total_linear
         OVERALL_ANGULAR = total_angular
-        print(OVERALL_ANGULAR, OVERALL_LINEAR)
+        print(f"Overall speed: {OVERALL_ANGULAR}, {OVERALL_LINEAR}")
 
     def mode_potential_field(self):
-        # TODO: şu an için arucoyu direkt ekliyoruz, onun için ek bir potential field burada yapılabilir
+        # TODO: şu an için targetı direkt ekliyoruz, onun için ek bir potential field burada yapılabilir
         field_linear = sum(v[0] for k, v in self.source_velocities.items() if k != KEYBOARD)
         field_angular = sum(v[1] for k, v in self.source_velocities.items() if k != KEYBOARD)
         total_linear = K_field * field_linear + K_key * self.source_velocities[KEYBOARD][0]
@@ -149,10 +149,6 @@ class RobotController(Node):
         self.get_logger().info("Received keyboard velocity")
         self.base_callback(msg.linear.x, msg.angular.z, KEYBOARD)
 
-    def aruco_vel_callback(self, msg):
-        self.get_logger().info("Received aruco velocity")
-        self.base_callback(msg.linear.x, msg.angular.z, ARUCO)
-
     def obstacle_vel_callback(self, msg):
         self.get_logger().info("Received potential field velocity")
         self.base_callback(msg.linear.x, msg.angular.z, OBSTACLE)
@@ -165,38 +161,14 @@ class RobotController(Node):
         """
         Publishes to the topic periodically
         """
-        if not self.is_simulation:
-            try:
-                status_request = {"get_status": True}
-                self.sock.sendall(json.dumps(status_request).encode('utf-8'))
-                response = self.sock.recv(1024).decode()
-                data = json.loads(response)
+        pose_msg = Pose2D()
+        pose_msg.x = self.curr_loc[0]
+        pose_msg.y = self.curr_loc[1]
+        pose_msg.theta = self.curr_angle
+        self.status_publisher.publish(pose_msg)
 
-                # Only publish if response is valid
-                if data.get("status") == "ok":
-                    twist_msg = Twist()
-                    twist_msg.linear.x = data.get("linear_x", 0.0)
-                    twist_msg.angular.z = data.get("angular_z", 0.0)
-                    self.status_publisher.publish(twist_msg)
-                    self.get_logger().info(
-                        f"Published robot status: linear_x={twist_msg.linear.x}, angular_z={twist_msg.angular.z}")
-                else:
-                    self.get_logger().warn("Invalid status response received.")
-            except Exception as e:
-                self.get_logger().error(f"Failed to request or publish status: {e}")
-        else:
-            twist_msg = Twist()
-            twist_msg.linear.x = self.curr_loc[0]
-            twist_msg.angular.z = self.curr_loc[1]
-            self.status_publisher.publish(twist_msg)
-
-            overall_speed_msg = Twist()
-            overall_speed_msg.linear.x = OVERALL_LINEAR
-            overall_speed_msg.angular.z = OVERALL_ANGULAR
-            self.overall_speed_publisher.publish(overall_speed_msg)
-
-            self.get_logger().info(
-                f"Published robot status: linear_x={twist_msg.linear.x}, angular_z={twist_msg.angular.z}")
+        self.get_logger().info(
+            f"Published robot status: ({pose_msg.x}, {pose_msg.y})")
 
 
 def main():
