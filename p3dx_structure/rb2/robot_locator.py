@@ -26,7 +26,9 @@ DIST_BETWEEN_MARKERS = 2.5  # distance between markers in meters
 KNOWN_MARKERS = {
     0: {"position": np.array([0.0, 0.0, Z_MARKER]), "rotation": np.eye(3)},
     1: {"position": np.array([DIST_BETWEEN_MARKERS, 0.0, Z_MARKER]), "rotation": np.eye(3)},
-    2: {"position": np.array([2*DIST_BETWEEN_MARKERS, 0.0, Z_MARKER]), "rotation": np.eye(3)}
+    2: {"position": np.array([2*DIST_BETWEEN_MARKERS, 0.0, Z_MARKER]), "rotation": np.eye(3)},
+    3: {"position": np.array([DIST_BETWEEN_MARKERS/2, 0.0, Z_MARKER]), "rotation": np.eye(3)},
+    4: {"position": np.array([3*DIST_BETWEEN_MARKERS/2, -0.2, Z_MARKER]), "rotation": np.eye(3)},
 }
 
 def compute_robot_pose_fixed_height(marker_rvec, marker_tvec, marker_id):
@@ -50,10 +52,10 @@ def compute_robot_pose_fixed_height(marker_rvec, marker_tvec, marker_id):
 class ArucoPosePublisher(Node):
     def __init__(self):
         super().__init__('aruco_pose_publisher')
-        self.publisher_ = self.create_publisher(Vector3, 'robot_pose', 100)
-        self.timer = self.create_timer(0.01, self.timer_callback)  # 100 Hz
+        self.publisher_ = self.create_publisher(Vector3, 'robot_pose', 10)
+        self.timer = self.create_timer(0.1, self.timer_callback)  # 10 Hz
 
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(2)
         if not self.cap.isOpened():
             self.get_logger().error("Could not open video capture device.")
             return
@@ -61,6 +63,9 @@ class ArucoPosePublisher(Node):
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         self.detector_params = cv2.aruco.DetectorParameters()
         self.detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.detector_params)
+        
+        # Variable to store last known pose
+        self.last_known_pose = None
 
     def timer_callback(self):
         ret, frame = self.cap.read()
@@ -92,7 +97,12 @@ class ArucoPosePublisher(Node):
             msg.z = round(avg_data[2], 3)  # yaw
 
             self.publisher_.publish(msg)
+            self.last_known_pose = msg  # Store the last known pose
             self.get_logger().info(f"Published Pose: x={msg.x}, y={msg.y}, yaw={msg.z} rad")
+        elif self.last_known_pose is not None:
+            # Publish last known pose if no markers detected
+            self.publisher_.publish(self.last_known_pose)
+            self.get_logger().info(f"Published Last Known Pose: x={self.last_known_pose.x}, y={self.last_known_pose.y}, yaw={self.last_known_pose.z} rad")
 
         cv2.imshow("Robot Camera View", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -110,4 +120,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
