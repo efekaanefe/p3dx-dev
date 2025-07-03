@@ -207,7 +207,7 @@ class p3dxRobot:
         self.root.configure(bg="#2e2e2e")
         self.root.geometry("1450x1100")
 
-        self.scale = 400  # 1 meter = 80 pixels for canvas display
+        self.scale = 400  # 1 meter = 400 pixels for canvas display
 
         # Left side - canvas (arena)
         self.canvas_frame = tk.Frame(self.root, bg="#2e2e2e")
@@ -219,7 +219,7 @@ class p3dxRobot:
         self.heading_line = self.canvas.create_line(400, 400, 440, 400, fill="skyblue", width=4)
 
         # Right side - scrollable controls
-        control_canvas = tk.Canvas(self.root, width=900, height=860, bg="#2e2e2e", highlightthickness=0)
+        control_canvas = tk.Canvas(self.root, width=900, height=800, bg="#2e2e2e", highlightthickness=0)
         scrollbar = tk.Scrollbar(self.root, orient="vertical", command=control_canvas.yview)
         self.control_frame = tk.Frame(control_canvas, bg="#2e2e2e")
 
@@ -237,16 +237,16 @@ class p3dxRobot:
         entry_style = {"font": ("Arial", 15)}
 
         self.mode_label = tk.Label(self.control_frame, text="Mode: Idle", **label_style)
-        self.mode_label.pack(anchor="w", pady=6)
+        self.mode_label.pack(anchor="w", pady=3)
 
         self.pos_label = tk.Label(self.control_frame, text="Position: (0.00, 0.00)", **label_style)
-        self.pos_label.pack(anchor="w", pady=6)
+        self.pos_label.pack(anchor="w", pady=3)
 
         self.angle_label = tk.Label(self.control_frame, text="Angle: 0°", **label_style)
-        self.angle_label.pack(anchor="w", pady=6)
+        self.angle_label.pack(anchor="w", pady=3)
 
         self.vel_label = tk.Label(self.control_frame, text="Velocity: 0.0 m/s, 0.0 rad/s", **label_style)
-        self.vel_label.pack(anchor="w", pady=6)
+        self.vel_label.pack(anchor="w", pady=3)
 
         self.toggle_btn = tk.Button(self.control_frame, text="Switch to Manual Mode",
                                     font=("Arial", 15), bg="#5c5c5c", fg="white",

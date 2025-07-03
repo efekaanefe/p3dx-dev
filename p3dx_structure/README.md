@@ -35,14 +35,14 @@ rosrun rosaria RosAria
 ```commandline
 rosrun pioneer rb1_ros1.py
 ```
-This opens the socket. Since the socket timeouts if there is no connection after some time, you may need to stop and rerun this line.
+This opens the socket. Since the socket timeouts if there is no connection after some time, you may need to stop and rerun this line time to time.
 
 
 ## Step 2: ROS2
 
 ### Set up your ros2 environment
 
-1. Source ros with your version of ros. Since the lidar requires ros2 foxy, we will be using that.
+1. Source ros with your version of ros. Since the lidar requires ros2 foxy, we have been using that version.
 ```commandline
 source /opt/ros/foxy/setup.bash
 ```
@@ -63,7 +63,7 @@ ros2 pkg create --build-type ament_python rb2 --dependencies rclpy std_msgs
 4. Move your source codes into the directory `p3dx_ws/src/rb2/rb2/` . For our case, move all the files under `p3dx_structure/rb2` in the github repository.
 
 
-5. To be able to run the scripts, open the setup.py file under your package folder. Make sure the console scripts list under the entry points dictionary 
+5. To be able to run the scripts, open the `setup.py` file under your package folder. Make sure the console scripts list under the entry points dictionary 
 looks like this:
 ```python
 entry_points={
@@ -99,7 +99,9 @@ It will ask you whether you want this to be a simulation or not. If you type `y`
 
 You can run the other scripts by changing the console cript name in the command above.
 
-### Development
+
+
+## Development
 
 You can add different nodes to publish velocity by adding new python files under the package and adding them to the console_scripts.
 
