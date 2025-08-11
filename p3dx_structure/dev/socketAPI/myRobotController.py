@@ -85,7 +85,7 @@ if __name__ == "__main__":
     # robot = SimpleRobotController(host='192.168.68.65', port=9090)
 
     # For simulation (testing)
-    robot = SimpleRobotController(is_simulation=True)
+    robot = SimpleRobotController(is_simulation=False)
 
     # Send commands
     robot.set_velocity(0.5, 0.0)  # Move forward at 0.5 m/s

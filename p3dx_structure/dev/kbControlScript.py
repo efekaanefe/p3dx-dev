@@ -4,7 +4,7 @@ import time
 import threading
 import sys
 import os
-from myRobotController import SimpleRobotController
+from socketAPI.myRobotController import SimpleRobotController
 
 # For Windows
 try:
