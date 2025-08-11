@@ -8,9 +8,11 @@ import tkinter as tk
 
 MAX_LINEAR_SPEED = 6.28
 MAX_ANGULAR_SPEED = 1.0
+LINEAR_SPEED_INCREMENT = 0.5
+ANGULAR_SPEED_INCREMENT = 0.3
 
 class p3dxRobot:
-    def __init__(self, is_simulation=False, host='192.168.68.58', port=9090):
+    def __init__(self, is_simulation=False, host='192.168.68.65', port=9090):
         self.is_simulation = is_simulation
         self.linear_x = 0.0
         self.angular_z = 0.0
@@ -170,13 +172,13 @@ class p3dxRobot:
             linear = 0.0
             angular = 0.0
             if self.key_states["w"]:
-                linear += 0.1
+                linear += LINEAR_SPEED_INCREMENT
             if self.key_states["s"]:
-                linear -= 0.1
+                linear -= LINEAR_SPEED_INCREMENT
             if self.key_states["a"]:
-                angular += 0.1
-            if self.key_states["d"]:
-                angular -= 0.1
+                angular += ANGULAR_SPEED_INCREMENT
+            if self.key_states["d"]: 
+                angular -= ANGULAR_SPEED_INCREMENT 
 
             self.set_velocity(linear, angular)
             time.sleep(0.1)
@@ -354,7 +356,7 @@ class p3dxRobot:
 
 
 def main():
-    robot = p3dxRobot(is_simulation= True)
+    robot = p3dxRobot(is_simulation= False)
 
     try:
         while True:
